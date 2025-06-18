@@ -2,7 +2,7 @@
 # # aidweather functional tests
 
 # %%
-from power_api import PowerAPI
+from aidweather.power_api import PowerAPI
 from IPython.display import display
 
 # %%
@@ -38,3 +38,5 @@ api.plot_folium_map(zoom=7)
 aggregated = api.aggregate(df_key="short_names", freq="W", agg={"T2M": "mean"})
 display(f"Aggregated data shape: {aggregated.shape}", aggregated.head())
 
+
+# %%

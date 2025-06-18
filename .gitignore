@@ -1,7 +1,10 @@
 ipynb_checkpoints/
 *.ipynb
+*.pyc
 data/
 large/
+__pycache__/
 .python-version
 .vscode/settings.json
+
 
