@@ -206,6 +206,9 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# VS Code
+/.vscode
+
 # General stuff (notes, papers, misc)
 misc/
 project_overview_outline.md
