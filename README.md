@@ -12,13 +12,13 @@
 For a streamlined, production-grade setup that automatically detects your environment, creates a virtual environment, and installs `aidweather` (with optional developer tools) in a single command, run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/install.sh | bash
 ```
 
 > [!TIP]
 > You can pass arguments directly to the installer script through curl using `-s --`. For example, to install developer tools and skip interactive prompts:
 > ```bash
-> curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash -s -- --dev -y
+> curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/install.sh | bash -s -- --dev -y
 > ```
 
 ### 2. Standard Pip Installation
