@@ -1,0 +1,21 @@
+{
+    "ElasticNet": {
+        "model__alpha": {"dist": "loguniform", "a": 0.0001, "b": 10.0},
+        "model__l1_ratio": {"dist": "uniform", "loc": 0.0, "scale": 1.0}
+    },
+    "RandomForest": {
+        "model__n_estimators": {"dist": "randint", "low": 50, "high": 500},
+        "model__max_depth": [5, 10, 20, null],
+        "model__min_samples_leaf": {"dist": "randint", "low": 1, "high": 5}
+    },
+    "HistGBR": {
+        "model__max_depth": [null, 3, 5, 7, 10],
+        "model__learning_rate": {"dist": "loguniform", "a": 0.001, "b": 0.3},
+        "model__max_bins": {"dist": "randint", "low": 64, "high": 255}
+    },
+    "XGBoost": {
+        "model__n_estimators": {"dist": "randint", "low": 50, "high": 500},
+        "model__max_depth": [3, 5, 7, 10],
+        "model__learning_rate": {"dist": "uniform", "loc": 0.01, "scale": 0.3}
+    }
+}

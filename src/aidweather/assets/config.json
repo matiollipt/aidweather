@@ -1,0 +1,86 @@
+{
+    "base_urls": {
+        "daily": {
+            "point": "https://power.larc.nasa.gov/api/temporal/daily/point",
+            "regional": "https://power.larc.nasa.gov/api/temporal/daily/regional"
+        },
+        "hourly": {
+            "point": "https://power.larc.nasa.gov/api/temporal/hourly/point"
+        }
+    },
+    "params": {
+        "all": {
+            "T2M": "Temperature at 2 m (°C)",
+            "T2M_MAX": "Maximum Temperature at 2 m (°C)",
+            "T2M_MIN": "Minimum Temperature at 2 m (°C)",
+            "T2M_RANGE": "Temperature Range at 2 m (°C)",
+            "T2MWET": "Wet Bulb Temperature at 2 m (°C)",
+            "T2MDEW": "Dew Point Temperature at 2 m (°C)",
+            "TS": "Surface Skin Temperature (°C)",
+            "RH2M": "Relative Humidity at 2 m (%)",
+            "PRECTOTCORR": "Corrected Total Precipitation (mm/day)",
+            "ALLSKY_SFC_SW_DWN": "All Sky Surface Shortwave Downward Radiation (kWh/m²/day)",
+            "ALLSKY_SFC_PAR_TOT": "All Sky Photosynthetically Active Radiation (MJ/m²/day)",
+            "WS10M": "Wind Speed at 10 m (m/s)",
+            "WS10M_MAX": "Maximum Wind Speed at 10 m (m/s)",
+            "WD10M": "Wind Direction at 10 m (degrees)",
+            "PS": "Surface Pressure (kPa)"
+        },
+        "default": {
+            "T2M": "Temperature at 2 m (°C)",
+            "T2M_RANGE": "Temperature Range at 2 m (°C)",
+            "T2MDEW": "Dew Point Temperature at 2 m (°C)",
+            "RH2M": "Relative Humidity at 2 m (%)",
+            "PRECTOTCORR": "Corrected Total Precipitation (mm/day)",
+            "ALLSKY_SFC_PAR_TOT": "All Sky Photosynthetically Active Radiation (MJ/m²/day)",
+            "WS10M": "Wind Speed at 10 m (m/s)"
+        }
+    },
+    "param_descriptions": {
+        "T2M": "Average Air Temperature at 2 m (°C): Modeled daily average air temperature. Data is obtained from the NASA MERRA-2 assimilation model (1981-Present, ~0.5°x0.625° resolution). In agriculture, T2M is critical for calculating Growing Degree Days (GDD) and modeling crop developmental stages and growth rates. Used in machine learning models for yield prediction and thermal stress assessment.",
+        "T2M_MAX": "Maximum Air Temperature at 2 m (°C): Modeled maximum hourly air temperature. Data is obtained from the NASA MERRA-2 assimilation model (1981-Present, ~0.5°x0.625° resolution). T2M_MAX is vital for detecting heat stress events which can cause flower abortion, reduced photosynthesis, and poor grain filling. Used as a feature in ML models to flag high-temperature risk periods.",
+        "T2M_MIN": "Minimum Air Temperature at 2 m (°C): Modeled minimum hourly air temperature. Data is obtained from the NASA MERRA-2 assimilation model (1981-Present, ~0.5°x0.625° resolution). T2M_MIN is essential for identifying frost risk (chilling injury) and for calculating GDD base temperatures. Used in phenology models to predict planting/harvest windows.",
+        "T2M_RANGE": "Diurnal Temperature Range at 2 m (°C): The difference between T2M_MAX and T2M_MIN. Data is derived from the NASA MERRA-2 model (1981-Present). A large range can impact evapotranspiration (ET) and plant respiration efficiency. It is used in data science for calculating stress indices and ET estimations.",
+        "T2MWET": "Wet Bulb Temperature at 2 m (°C): The adiabatic saturation temperature (cooling limit by evaporation). Data is obtained from the NASA MERRA-2 model (1981-Present). T2MWET is a measure of combined heat and humidity, highly relevant for assessing potential animal heat stress in livestock operations and for calculating cooling needs in controlled environments.",
+        "T2MDEW": "Dew Point Temperature at 2 m (°C): The temperature at which air becomes saturated and condensation forms. Data is obtained from the NASA MERRA-2 model (1981-Present). This parameter is crucial for predicting conditions conducive to foliar fungal diseases (e.g., rusts, blights) where prolonged leaf wetness is required for spore germination.",
+        "TS": "Surface Skin Temperature (°C): The calculated temperature of the top surface of the Earth (soil, vegetation canopy, or water). Data is obtained from the NASA MERRA-2 model (1981-Present). TS is a key input for remote sensing-based Evapotranspiration (ET) models (e.g., SEBAL/METRIC), and for monitoring soil temperature influence on seed germination and root growth.",
+        "RH2M": "Relative Humidity at 2 m (%): Ratio of actual water vapor content to the maximum possible saturation. Data is obtained from the NASA MERRA-2 model (1981-Present, ~0.5°x0.625° resolution). RH2M affects transpiration rates (low RH increases water loss) and disease incidence. Used in ML models for predicting irrigation needs and disease risk.",
+        "PRECTOTCORR": "Corrected Total Precipitation (mm/day): Total liquid and frozen water precipitation, adjusted for known biases. Data is obtained from the NASA MERRA-2 model (1981/1997-Present, ~0.5°x0.625° resolution). Essential for water balance models, irrigation scheduling, and assessing drought/flood risk. It's a primary input feature for deep learning models predicting crop yield.",
+        "ALLSKY_SFC_SW_DWN": "All Sky Surface Shortwave Downward Radiation (kWh/m²/day): Total solar energy reaching the surface under actual atmospheric conditions (Direct + Diffuse). Data is derived from NASA satellite observations (1984-Present, ~1.0°x1.0° resolution). This is the key energy input for calculating Reference Evapotranspiration (ETo) using methods like Penman-Monteith, which drives irrigation decisions.",
+        "ALLSKY_SFC_PAR_TOT": "All Sky Photosynthetically Active Radiation (MJ/m²/day): The total energy flux (400-700 nm) used by plants for photosynthesis. Data is derived from NASA satellite observations (1984-Present, ~1.0°x1.0° resolution). This directly quantifies the light available for plant growth. Used in Crop Growth Models (CGMs) like DSSAT and APSIM to simulate biomass accumulation and final yield.",
+        "WS10M": "Average Wind Speed at 10 m (m/s): Modeled daily average horizontal movement of air. Data is obtained from the NASA MERRA-2 model (1981-Present). Wind is a crucial factor in the Evapotranspiration (ET) calculation and can cause mechanical stress. Used in predictive models for water loss and general crop stress.",
+        "WS10M_MAX": "Maximum Wind Speed at 10 m (m/s): Modeled maximum instantaneous wind speed. Data is obtained from the NASA MERRA-2 model (1981-Present). Essential for assessing potential structural damage to crops (lodging of cereals/maize) or infrastructure (greenhouses). Used as a threshold trigger for high-risk warnings in decision-support systems.",
+        "WD10M": "Average Wind Direction at 10 m (degrees): Modeled daily average direction from which the wind is blowing. Data is obtained from the NASA MERRA-2 model (1981-Present). Primarily used for modeling the drift/dispersion of airborne inputs (pesticides, herbicides, spores) and for local climate pattern analysis (e.g., windbreak planning).",
+        "PS": "Surface Pressure (kPa): The atmospheric pressure at the earth's surface, adjusted for local elevation. Data is obtained from the NASA MERRA-2 model (1981-Present). PS is a necessary input for the Penman-Monteith Evapotranspiration equation to accurately account for air density, making it fundamental for precise water management."
+    },
+    "api_limits": {
+        "max_parameters_per_point_request": 20,
+        "recommended_community": "AG"
+    },
+    "cache_config": {
+        "enabled": true,
+        "path": ".aidweather_cache"
+    },
+    "logging_config": {
+        "enabled": true,
+        "filename": "aidweather.log",
+        "level": "INFO"
+    },
+    "color_map": {
+        "T2M": "#D55E00",
+        "T2M_MAX": "#882255",
+        "T2M_MIN": "#56B4E9",
+        "T2M_RANGE": "#E69F00",
+        "T2MWET": "#CC79A7",
+        "T2MDEW": "#AA4499",
+        "TS": "#A0522D",
+        "RH2M": "#0072B2",
+        "PRECTOTCORR": "#009E73",
+        "ALLSKY_SFC_SW_DWN": "#D4AC0D",
+        "ALLSKY_SFC_PAR_TOT": "#117733",
+        "WS10M": "#808080",
+        "WS10M_MAX": "#000000",
+        "WD10M": "#999999",
+        "PS": "#332288"
+    }
+}
