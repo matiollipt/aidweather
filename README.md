@@ -8,8 +8,33 @@
 
 ## Installation
 
+### 1. Quick One-Liner (Linux / macOS)
+For a streamlined, production-grade setup that automatically detects your environment, creates a virtual environment, and installs `aidweather` (with optional developer tools) in a single command, run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash
+```
+
+> [!TIP]
+> You can pass arguments directly to the installer script through curl using `-s --`. For example, to install developer tools and skip interactive prompts:
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash -s -- --dev -y
+> ```
+
+### 2. Standard Pip Installation
+If you prefer standard package managers to manage your own virtual environment, install directly from PyPI:
+
 ```bash
 pip install aidweather
+```
+
+### 3. Local Development Installation
+For custom development, clone the repository and run the setup script locally:
+
+```bash
+git clone https://github.com/matiollipt/aidweather.git
+cd aidweather
+./install.sh --dev
 ```
 
 ## Quick Start

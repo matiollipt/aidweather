@@ -1,0 +1,45 @@
+# Environment variables
+.env
+.env.*
+
+# Cache directories
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+.aidweather_cache/
+*.db
+*.sqlite
+
+# Dev & IDE folders/files
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*~
+*.log
+
+# Distribution & Build folders
+develop-eggs/
+dist/
+build/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.eggs/
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
