@@ -270,6 +270,12 @@ if failures:
     sys.exit(1)
 else:
     print("\n  All imports OK.")
+
+print("\n  Activating virtual environment...")
+
+source $VENV_PATH/bin/activate
+
+
 PYEOF
 
 # ── Done ──────────────────────────────────────────────────────────────────────
