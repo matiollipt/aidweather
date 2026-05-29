@@ -37,6 +37,7 @@ USE_VENV=true
 VENV_PATH=".venv"
 CLEAN_VENV=false
 AUTO_YES=false
+USE_PIPX=false
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 show_help() {
@@ -44,6 +45,7 @@ show_help() {
     printf 'Usage:\n'
     printf '  ./install.sh [options]\n\n'
     printf 'Options:\n'
+    printf '  %-24s %s\n' "--pipx"         "Install globally in isolated env using pipx"
     printf '  %-24s %s\n' "--dev"           "Install developer tools (pytest, ruff, mypy, build)"
     printf '  %-24s %s\n' "--no-venv"       "Skip venv creation (use active/global Python)"
     printf '  %-24s %s\n' "--venv-path DIR" "Custom venv path (default: .venv)"
@@ -52,6 +54,7 @@ show_help() {
     printf '  %-24s %s\n' "-h, --help"      "Show this help and exit"
     printf '\nExamples:\n'
     printf '  ./install.sh                         # Default install in .venv\n'
+    printf '  ./install.sh --pipx                  # Install globally via pipx\n'
     printf '  ./install.sh --dev --clean           # Fresh install with dev tools\n'
     printf '  curl -fsSL .../install.sh | bash -s -- --dev -y\n\n'
     exit 0
@@ -60,6 +63,7 @@ show_help() {
 # ── Argument parsing ──────────────────────────────────────────────────────────
 while [ $# -gt 0 ]; do
     case "$1" in
+        --pipx)         USE_PIPX=true;  shift ;;
         --dev|-d)       DEV_MODE=true;  shift ;;
         --no-venv)      USE_VENV=false; shift ;;
         --venv-path)    VENV_PATH="$2"; shift 2 ;;
@@ -195,10 +199,21 @@ pip_install() {
     fi
 }
 
+if [ "$USE_PIPX" = true ]; then
+    if ! command -v pipx > /dev/null 2>&1; then
+        die "pipx is not installed. Please install pipx first (e.g., 'brew install pipx' or 'sudo apt install pipx') or run without --pipx."
+    fi
+    USE_VENV=false
+fi
+
 if [ "$USE_VENV" = true ]; then
     setup_venv
 else
-    info "Skipping venv — using active/global Python."
+    if [ "$USE_PIPX" = true ]; then
+        info "Skipping standard venv — installing via pipx."
+    else
+        info "Skipping venv — using active/global Python."
+    fi
     ABS_VENV=""
 fi
 
@@ -207,10 +222,15 @@ printf '\n'
 info "Installation plan"
 sep
 venv_label=$( [ "$USE_VENV" = true ] && echo "$VENV_PATH" || echo "global/active Python" )
+if [ "$USE_PIPX" = true ]; then
+    venv_label="pipx (isolated user application)"
+fi
 printf '  %-18s %b%s%b\n' "Package:"     "$GREEN$BOLD" "aidweather" "$NC"
 printf '  %-18s %s\n'     "Environment:" "$venv_label"
 printf '  %-18s %s\n'     "Dev tools:"   "$DEV_MODE"
-printf '  %-18s %s\n'     "Clean venv:"  "$CLEAN_VENV"
+if [ "$USE_PIPX" = false ]; then
+    printf '  %-18s %s\n'     "Clean venv:"  "$CLEAN_VENV"
+fi
 sep
 printf '\n'
 
@@ -231,27 +251,67 @@ if [ "$AUTO_YES" = false ]; then
 fi
 
 # ── Install core package ──────────────────────────────────────────────────────
-info "Installing aidweather..."
-pip_install -e .
-ok "aidweather installed."
+if [ "$USE_PIPX" = true ]; then
+    info "Installing aidweather via pipx..."
+    if pipx list | grep -q "package aidweather"; then
+        info "aidweather already installed via pipx. Reinstalling..."
+        pipx install --force .
+    else
+        pipx install .
+    fi
+    ok "aidweather installed via pipx."
+else
+    info "Installing aidweather..."
+    pip_install -e .
+    ok "aidweather installed."
+fi
 
 # ── Developer tools ───────────────────────────────────────────────────────────
 if [ "$DEV_MODE" = true ]; then
-    info "Installing developer tools..."
-    pip_install \
-        "pytest>=8.0.0" \
-        "pytest-cov>=4.1.0" \
-        "requests-mock>=1.11.0" \
-        "ruff>=0.3.0" \
-        "mypy>=1.9.0" \
-        "build>=1.1.0" \
-        "twine>=5.0.0"
-    ok "Developer tools installed."
+    if [ "$USE_PIPX" = true ]; then
+        info "Injecting developer tools into pipx environment..."
+        pipx inject aidweather \
+            "pytest>=8.0.0" \
+            "pytest-cov>=4.1.0" \
+            "requests-mock>=1.11.0" \
+            "ruff>=0.3.0" \
+            "mypy>=1.9.0" \
+            "build>=1.1.0" \
+            "twine>=5.0.0"
+        ok "Developer tools injected."
+    else
+        info "Installing developer tools..."
+        pip_install \
+            "pytest>=8.0.0" \
+            "pytest-cov>=4.1.0" \
+            "requests-mock>=1.11.0" \
+            "ruff>=0.3.0" \
+            "mypy>=1.9.0" \
+            "build>=1.1.0" \
+            "twine>=5.0.0"
+        ok "Developer tools installed."
+    fi
 fi
 
 # ── Smoke test ────────────────────────────────────────────────────────────────
 info "Running smoke test..."
-"$PYTHON_BIN" - <<'PYEOF'
+if [ "$USE_PIPX" = true ]; then
+    # Try the standard pipx binary directory first to avoid other env pollution
+    PIPX_LOCAL_BIN="${PIPX_BIN_DIR:-$HOME/.local/bin}/aidweather"
+    if [ -f "$PIPX_LOCAL_BIN" ] && "$PIPX_LOCAL_BIN" --help > /dev/null 2>&1; then
+        ok "Smoke test passed: $PIPX_LOCAL_BIN CLI is available and responding."
+        # Warn if it's not in PATH or not the active one
+        if ! command -v aidweather > /dev/null 2>&1 || [ "$(command -v aidweather)" != "$PIPX_LOCAL_BIN" ]; then
+            warn "Note: $PIPX_LOCAL_BIN is not the active 'aidweather' in your PATH (found $(command -v aidweather || echo 'none') instead)."
+            warn "You may need to run 'pipx ensurepath' and restart your terminal."
+        fi
+    elif command -v aidweather > /dev/null 2>&1 && aidweather --help > /dev/null 2>&1; then
+        ok "Smoke test passed: aidweather CLI is available and responding."
+    else
+        die "Smoke test failed: Could not locate a working aidweather executable."
+    fi
+else
+    "$PYTHON_BIN" - <<'PYEOF'
 import sys
 
 checks = [("aidweather", "aidweather")]
@@ -271,12 +331,8 @@ if failures:
 else:
     print("\n  All imports OK.")
 
-print("\n  Activating virtual environment...")
-
-source $VENV_PATH/bin/activate
-
-
 PYEOF
+fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 printf '\n'
@@ -285,7 +341,13 @@ printf '%b  ✔  %baid%b%bweather%b%b setup complete%b\n' \
     "$GREEN$BOLD" "$NC" "$GREEN$BOLD" "$NC" "$ORANGE$BOLD" "$NC$BOLD" "$NC"
 printf '%b══════════════════════════════════════════════════%b\n\n' "$GREEN" "$NC"
 
-if [ "$USE_VENV" = true ]; then
+if [ "$USE_PIPX" = true ]; then
+    printf '  %bPackage installed globally via pipx.%b\n' "$PURPLE$BOLD" "$NC"
+    printf '  You can run the CLI directly:\n'
+    printf '    aidweather --help\n\n'
+    printf '  If the command is not found, ensure pipx binary path is in your PATH:\n'
+    printf '    pipx ensurepath\n\n'
+elif [ "$USE_VENV" = true ]; then
     printf '  %bActivate your environment:%b\n' "$PURPLE$BOLD" "$NC"
     printf '    source %s/bin/activate\n\n' "$VENV_PATH"
 fi

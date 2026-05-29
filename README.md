@@ -21,14 +21,26 @@ curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.
 > curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash -s -- --dev -y
 > ```
 
-### 2. Standard Pip Installation
+### 2. Global CLI Installation (pipx)
+If you want to use the `aidweather` CLI globally without manually managing virtual environments or risking dependency conflicts, use [pipx](https://github.com/pypa/pipx) to install it in an isolated user-level environment:
+
+```bash
+pipx install aidweather
+```
+
+You can also install it via the installer script using the `--pipx` flag, which can even be done remotely via curl:
+```bash
+curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash -s -- --pipx
+```
+
+### 3. Standard Pip Installation
 If you prefer standard package managers to manage your own virtual environment, install directly from PyPI:
 
 ```bash
 pip install aidweather
 ```
 
-### 3. Local Development Installation
+### 4. Local Development Installation
 For custom development, clone the repository and run the setup script locally:
 
 ```bash
