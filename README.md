@@ -93,6 +93,14 @@ aidweather fetch --lat -23.55 --lon -46.63 \
     --start 2023-01-01 --end 2023-12-31 \
     --params T2M,PRECTOTCORR --output data.csv
 
+# Create a small CSV file sites.csv with 3 points in São Paulo
+cat << 'EOF' > sites.csv
+lat,lon,name
+-23.55,-46.63,Sao Paulo Center
+-23.56,-46.64,Sao Paulo South
+-23.54,-46.62,Sao Paulo North
+EOF
+
 # Fetch for multiple points from a CSV file
 aidweather fetch-multi --points-file sites.csv \
     --start 2023-01-01 --end 2023-12-31 --output multi.parquet --format parquet
