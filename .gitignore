@@ -43,3 +43,6 @@ share/python-wheels/
 venv/
 env/
 ENV/
+
+# Scratch
+dev-notes/
