@@ -1,55 +1,53 @@
-# AidWeather Workflow Guide
+# How aidweather works
 
-> [!NOTE]
-> **AidWeather Project Context**
-> **Mission**: Weather data retrieval and validation for agricultural applications.
-> **Key Features**: Modular architecture, production-ready caching, and end-to-end NASA POWER integration.
-> **NASA POWER Compliance**: See [NASA_POWER_Licence_Usage.md](NASA_POWER_Licence_Usage.md) for data usage rights.
+`aidweather` turns geographic coordinates and a date range into a clean, validated weather dataset. Here's what happens under the hood and why the package is built the way it is.
 
 ---
 
-## From geographical points to validated weather data
+## The core flow
 
-**Starting point:** agricultural analysis requires robust meteorological data.
+```
+Coordinates + Date Range
+        ↓
+  Coordinate normalization (geo)
+        ↓
+  Config resolution (config)
+        ↓
+  Cache lookup → partial or full hit?
+     ↓ miss               ↓ hit
+  NASA POWER API      return cached data
+     ↓
+  Retry / backoff
+     ↓
+  Parse JSON → DataFrame
+     ↓
+  Write to cache (merged with existing)
+        ↓
+  Validated time series DataFrame
+```
 
-Examples:
-* Enriching farm harvest records with corresponding temperature and precipitation data.
-* Collecting historical weather baselines for specific agricultural plots.
-* Building a reliable foundational weather dataset for downstream ML or agronomic modeling.
+---
 
-AidWeather is built to turn geographic coordinates and time ranges into a structured dataset. The package is modular and focused: the `PowerClient` handles weather acquisition, the `geo` module normalizes location data, and the `utils` module provides time series standardization.
+## Why these modules exist
 
-## Workflow by module
+### `geo` — coordinate normalization
 
-### 1. Standardize coordinates and configuration
+Coordinates arrive from field records, GPS exports, and user input in DMS, DDM, and decimal degree formats — sometimes with Unicode degree symbols or inconsistent hemisphere notation. The `geo` module absorbs all of that variation before anything hits the API.
 
-Before weather fetching, AidWeather normalizes location and shared settings. The `geo` module provides robust parsing and validation for latitude and longitude in multiple formats, ensuring all requests are perfectly formed. The `config` module centralizes API URLs, parameter mappings, and cache settings. This reduces friction and inconsistency when scaling across many requests.
+### `config` — centralized settings
 
-### 2. Fetch external weather with NASA POWER
+API endpoint URLs, parameter metadata, cache paths, and color maps live in one place (`config.json`) and are accessible through the `cfg` singleton. Downstream packages in the `aid*` ecosystem share this config file, so there is no duplication of settings.
 
-The `PowerClient` retrieves daily or hourly weather from NASA POWER, with retries, local SQLite caching, gzip compression, and support for point and multi-point retrieval. This allows users to easily pull historical data in a robust, production-ready manner, avoiding transient network issues.
+### `client` — data acquisition
 
-**Typical weather variables**
-* temperature (T2M, T2M_MAX, T2M_MIN)
-* relative humidity (RH2M)
-* precipitation (PRECTOTCORR)
-* solar radiation (ALLSKY_SFC_PAR_TOT)
-* wind (WS10M)
-* other POWER parameters relevant to crop development.
+`PowerClient` handles the full request lifecycle: building payloads, checking the cache, fetching missing date ranges only, merging new data with cached data, and writing the result back to the cache. Retry logic and gzip compression are built in.
 
-### 3. Provide standardized output for downstream systems
+### `utils` — downstream compatibility
 
-The data is returned as a clean, standardized `pandas` DataFrame with a validated datetime index (managed by `ensure_date_column` in the `utils` module). This ensures that the dataset is ready to be merged directly with internal farm data or passed along to feature engineering, exploratory data analysis (EDA), and machine learning pipelines in other packages.
+`ensure_date_column` standardizes the time axis of any DataFrame so it's ready to merge with `PowerClient` output or pass to feature engineering pipelines.
 
-## End-to-end flow
-
-**Coordinates & Date Range → Coordinate Normalization → NASA POWER Fetch (w/ Caching & Retries) → Standardized Time Series DataFrame**
-
-A representative pipeline script in the project uses the `PowerClient` to fetch weather, leveraging the `geo` module to normalize points of interest.
+---
 
 ## Practical outcome
 
-AidWeather is best understood as a **foundational data ingestion package** for agricultural analytics:
-
-* **Technical-facing**: provides a resilient, caching, parallelized client to acquire NASA POWER data effortlessly.
-* **Business-facing**: ensures that downstream analysis and models are built upon consistent and validated meteorological baselines.
+`aidweather` is a **foundational data ingestion layer**. It is designed to be called once per location/date-range combination and to be invisible on every subsequent call (cache hit). The output is always a `pandas` DataFrame with a `DatetimeIndex` and numeric columns — ready for analysis, joining with field data, or passing to a model.

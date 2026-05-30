@@ -1,52 +1,69 @@
-# geo
+# geo — Coordinate utilities
 
-> [!NOTE]
-> **AidWeather Project Context**
-> **Mission**: Weather data retrieval and validation for agricultural applications.
-> **Key Features**: Modular architecture, production-ready caching, and end-to-end NASA POWER integration.
-> **NASA POWER Compliance**: See [NASA_POWER_Licence_Usage.md](NASA_POWER_Licence_Usage.md) for data usage rights.
+The `geo` module handles one job: turning geographic coordinates into a reliable, typed object regardless of what format they came in as.
+
+In practice, field data arrives in all sorts of formats — GPS units output DMS, spreadsheets use decimal degrees, and legacy files sometimes mix the two. `GeoCoordinate` and `normalize_coord_input` absorb that variation so the rest of the code never has to deal with it.
 
 ---
 
-## Purpose
-Provides robust utilities for handling, parsing, and formatting geospatial coordinates. It ensures coordinates are always represented as valid decimal degrees.
+## GeoCoordinate
 
-## Key responsibilities
-- Parsing coordinates from various string formats (DMS, DDM, DD).
-- validating latitude (-90 to 90) and longitude (-180 to 180).
-- Formatting coordinates back to strings.
-- Normalizing mixed input types into a standard object.
+An immutable value object representing a lat/lon pair in decimal degrees.
 
-## Public API
-
-### Classes
-- `GeoCoordinate` (Frozen Dataclass):
-  - Attributes: `lat` (float), `lon` (float).
-  - `from_decimal(lat, lon)`: Factory method.
-  - `from_strings(lat_str, lon_str)`: Auto-detects format.
-  - `to_dd()`, `to_dms_str()`, `to_ddm_str()`: Formatters.
-
-### Functions
-- `normalize_coord_input(lat, lon=None) -> GeoCoordinate`:
-  - Accepts tuples, separate args, strings, or existing objects and returns a `GeoCoordinate`.
-
-## Data flow and dependencies
-- **External dependencies**: `re`, `math`, `dataclasses`.
-- **Downstream**: Used heavily by `client.PowerClient` and `cli`.
-
-## Error handling and edge cases
-- **Validation**: Raises `ValueError` immediately upon creation if coordinates are out of bounds.
-- **Parsing**: Raises `ValueError` if string formats do not match expected patterns.
-
-## Minimal usage example
 ```python
-from aidweather.geo import GeoCoordinate, normalize_coord_input
+from aidweather import GeoCoordinate
 
-# From strings
-c1 = normalize_coord_input("23°33'0.0\" S", "46°37'48.0\" W")
+# From decimal degrees
+coord = GeoCoordinate.from_decimal(-23.55, -46.63)
+print(coord.lat, coord.lon)   # -23.55, -46.63
 
-# From numbers
-c2 = normalize_coord_input(-23.55, -46.63)
+# From a DMS string (auto-detects format)
+coord = GeoCoordinate.from_strings("23°33'0\" S", "46°37'48\" W")
 
-print(c1.lat, c1.lon)
+# From DDM strings
+coord = GeoCoordinate.from_ddm_str("23°33.0' S", "46°37.8' W")
+
+# Convert back to string formats
+print(coord.to_dms_str())   # ('23°33\'0" S', '46°37\'48" W')
+print(coord.to_ddm_str())   # ('23°33.000\' S', '46°37.800\' W')
+print(coord.to_dd_str())    # ('23.55000° S', '46.63000° W')
+
+# Get raw decimal tuple
+lat, lon = coord.as_decimal()
 ```
+
+Coordinates are validated on creation — out-of-range values raise `ValueError` immediately.
+
+---
+
+## normalize_coord_input
+
+High-level helper that accepts almost any reasonable coordinate input and returns a `GeoCoordinate`. Use this when your code needs to handle inputs from different sources.
+
+```python
+from aidweather import normalize_coord_input
+
+# From a tuple of floats
+coord = normalize_coord_input((-23.55, -46.63))
+
+# From two separate numbers
+coord = normalize_coord_input(-23.55, -46.63)
+
+# From a tuple of strings (any format)
+coord = normalize_coord_input(("23°33'0\" S", "46°37'48\" W"))
+
+# Already a GeoCoordinate — returned as-is
+coord = normalize_coord_input(existing_coord)
+```
+
+---
+
+## Supported string formats
+
+| Format | Example |
+|---|---|
+| Decimal Degrees (DD) | `"-23.55"`, `"23.55° S"` |
+| Degrees Decimal Minutes (DDM) | `"23°33.0' S"` |
+| Degrees Minutes Seconds (DMS) | `"23°33'0\" S"` |
+
+The parser handles Unicode degree variants (`º`, `˚`), smart quotes, and double-apostrophe seconds (`''`).

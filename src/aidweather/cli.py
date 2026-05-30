@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
+from __future__ import annotations
+
 """
 Command Line Interface for the AidWeather Power Client.
 """
@@ -191,8 +193,9 @@ def fetch_multi(  # noqa: PLR0913
         typer.Option("--resolution", help="Temporal resolution: 'daily' or 'hourly'."),
     ] = "daily",
     workers: Annotated[
-        int, typer.Option("--workers", help="Max concurrent requests.")
-    ] = 8,
+        int,
+        typer.Option("--workers", help="Max concurrent requests (NASA recommends ≤5)."),
+    ] = 5,
     output: Annotated[
         Path | None, typer.Option("--output", help="Optional path to save data.")
     ] = None,
@@ -294,8 +297,9 @@ def fetch_transect(  # noqa: PLR0913
         int, typer.Option("--num-points", help="Number of sampling points.")
     ] = 10,
     workers: Annotated[
-        int, typer.Option("--workers", help="Max concurrent requests.")
-    ] = 8,
+        int,
+        typer.Option("--workers", help="Max concurrent requests (NASA recommends ≤5)."),
+    ] = 5,
     elevation: Annotated[
         float | None,
         typer.Option("--elevation", help="Optional uniform site elevation in meters."),
@@ -427,25 +431,48 @@ def cache_info():
     db_path = Path(cache_dir) / "aidweather_cache.db"
 
     console.print(f"[bold]Cache Enabled:[/bold] {enabled}")
+    console.print(f"[bold]Cache Path:[/bold] {db_path.resolve()}")
+    env_override = __import__("os").environ.get("AIDWEATHER_CACHE_DIR")
+    if env_override:
+        console.print(f"[bold]Path Source:[/bold] AIDWEATHER_CACHE_DIR env var")
+    else:
+        console.print(
+            "[bold]Path Override:[/bold] set AIDWEATHER_CACHE_DIR to use a custom location"
+        )
+
     if not enabled:
         return
 
     if not db_path.exists():
-        console.print(
-            f"[bold]Cache Status:[/bold] Empty/Not found at {db_path.resolve()}"
-        )
+        console.print(f"[bold]Cache Status:[/bold] Empty — no database found yet.")
         return
 
-    size_mb = db_path.stat().st_size / (1024 * 1024)
-    console.print(f"[bold]Cache File:[/bold] {db_path.resolve()}")
-    console.print(f"[bold]Size:[/bold] {size_mb:.2f} MB")
+    size_bytes = db_path.stat().st_size
+    size_mb = size_bytes / (1024 * 1024)
+    console.print(f"[bold]File Size:[/bold] {size_mb:.2f} MB ({size_bytes:,} bytes)")
 
     try:
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
+
         cur.execute("SELECT COUNT(*) FROM cache")
         count = cur.fetchone()[0]
-        console.print(f"[bold]Entries:[/bold] {count}")
+        console.print(f"[bold]Cached Entries:[/bold] {count}")
+
+        if count > 0:
+            cur.execute("SELECT MIN(timestamp), MAX(timestamp) FROM cache")
+            oldest, newest = cur.fetchone()
+            console.print(f"[bold]Oldest Entry:[/bold] {oldest}")
+            console.print(f"[bold]Newest Entry:[/bold] {newest}")
+
+            cur.execute("SELECT SUM(LENGTH(data)) FROM cache")
+            raw_compressed = cur.fetchone()[0] or 0
+            console.print(
+                f"[bold]Compressed Data:[/bold] {raw_compressed / (1024 * 1024):.2f} MB"
+                f" (gzip, stored in BLOB)"
+            )
+
+        conn.close()
     except sqlite3.Error as e:
         console.print(f"[bold red]Error reading cache DB:[/bold red] {e}")
 

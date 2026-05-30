@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
+from __future__ import annotations
+
 """
 aidweather
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -58,9 +60,11 @@ from rich.panel import Panel
 from rich.table import Table
 from urllib3.util.retry import Retry
 
+from aidweather import __version__
+
 # --- Module-level Helpers ---
 
-USER_AGENT = "aidweather/0.1.0 (+https://github.com/matiollipt/aidweather)"
+USER_AGENT = f"aidweather/{__version__} (+https://github.com/matiollipt/aidweather)"
 
 
 def _session_with_retries(
@@ -510,39 +514,21 @@ class PowerClient:
             "cache_final_bytes": 0,
         }
 
-        # Load .env file if it exists
-        _load_env_file()
-
-        # Authentication / API Key Setup
-        self.api_key = api_key or os.environ.get("NASA_POWER_API_KEY")
-        console = Console()
-        if self.api_key == "DEMO_KEY":
-            msg = (
-                "Using NASA POWER [bold yellow]DEMO_KEY[/bold yellow]. "
-                "Rate limits will be very strict."
-            )
-            logger.info("Using NASA POWER DEMO_KEY. Rate limits will be very strict.")
-            console.print(f"\n[bold yellow]Info Note:[/bold yellow] {msg}")
-        elif self.api_key:
-            masked_key = f"***{self.api_key[-4:]}" if len(self.api_key) > 4 else "***"
-            msg = (
-                "NASA POWER API key detected and configured: "
-                f"[bold green]{masked_key}[/bold green]"
-            )
-            logger.info("NASA POWER API key detected and configured.")
-            console.print(f"\n[bold cyan]Info Note:[/bold cyan] {msg}")
-        else:
-            msg = (
-                "No NASA POWER API key provided. "
-                "Using [bold yellow]IP-based limits[/bold yellow]."
-            )
-            logger.info("No NASA POWER API key provided. Using IP-based limits.")
-            console.print(f"\n[bold cyan]Info Note:[/bold cyan] {msg}")
-
         # Caching setup
         self.cache_cfg = cfg.cache_config()
         if self.cache_cfg.get("enabled", False):
             self._init_cache_db()
+
+        # Authentication / API Key Setup — log state, never print to console
+        _load_env_file()
+        self.api_key = api_key or os.environ.get("NASA_POWER_API_KEY")
+        if self.api_key == "DEMO_KEY":
+            logger.info("Using NASA POWER DEMO_KEY. Rate limits will be very strict.")
+        elif self.api_key:
+            masked_key = f"***{self.api_key[-4:]}" if len(self.api_key) > 4 else "***"
+            logger.info("NASA POWER API key configured (%s).", masked_key)
+        else:
+            logger.info("No NASA POWER API key provided. Using IP-based limits.")
 
     def _init_cache_db(self) -> None:
         """Initializes the SQLite database connection and creates the cache table.
@@ -1103,7 +1089,7 @@ class PowerClient:
 
         if failed_points:
             logger.warning(
-                f"{len(failed_points)}/{len(points)} points failed to fetch."
+                f"{len(failed_points)}/{len(parsed_points)} points failed to fetch."
             )
 
         if not all_results:

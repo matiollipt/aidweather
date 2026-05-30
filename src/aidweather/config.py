@@ -42,6 +42,8 @@ from collections.abc import Mapping
 from importlib import resources
 from typing import Any
 
+from platformdirs import user_cache_dir
+
 # Hardcoded defaults — used only if config.json is absent or unreadable
 _DEFAULT_URLS = {
     "daily": {
@@ -165,17 +167,37 @@ class _Config:
     def cache_config(self) -> dict[str, Any]:
         """Returns the caching configuration dictionary.
 
-        Merges built-in defaults with any overrides present in ``config.json``.
-        The ``path`` default points to ``~/.aidweather_cache``.
+        Path resolution priority (highest to lowest):
+
+        1. ``AIDWEATHER_CACHE_DIR`` environment variable.
+        2. An **absolute** ``path`` key in ``config.json``.
+        3. Platform-appropriate user cache directory
+           (``~/.cache/aidweather`` on Linux, ``~/Library/Caches/aidweather``
+           on macOS, ``%LOCALAPPDATA%/aidweather/Cache`` on Windows).
 
         Returns:
             A dictionary of caching settings (``enabled``, ``path``, etc.).
         """
+        xdg_default = user_cache_dir("aidweather", appauthor=False)
+        env_override = os.environ.get("AIDWEATHER_CACHE_DIR")
+        json_path = self.get("cache_config.path")
+
+        # Determine effective path — env var wins, then JSON (if absolute), then XDG
+        if env_override:
+            effective_path = env_override
+        elif json_path and os.path.isabs(json_path):
+            effective_path = json_path
+        else:
+            effective_path = xdg_default
+
         defaults: dict[str, Any] = {
             "enabled": True,
-            "path": os.path.expanduser("~/.aidweather_cache"),
+            "path": effective_path,
         }
-        return {**defaults, **self.get("cache_config", default={})}
+        json_overrides = {
+            k: v for k, v in (self.get("cache_config") or {}).items() if k != "path"
+        }
+        return {**defaults, **json_overrides}
 
     def logging_config(self) -> dict[str, Any]:
         """Returns the logging configuration dictionary.

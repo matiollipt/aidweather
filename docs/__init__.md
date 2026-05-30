@@ -1,47 +1,70 @@
-# __init__
+# aidweather — Package Overview
 
-> [!NOTE]
-> **AidWeather Project Context**
-> **Mission**: Weather data retrieval and validation for agricultural applications.
-> **Key Features**: Modular architecture, production-ready caching, and end-to-end NASA POWER integration.
-> **NASA POWER Compliance**: See [NASA_POWER_Licence_Usage.md](NASA_POWER_Licence_Usage.md) for data usage rights.
+`aidweather` retrieves, caches, and validates daily and hourly meteorological data from [NASA's POWER API](https://power.larc.nasa.gov/). It is designed as the foundational data ingestion layer for the `aid*` toolkit.
+
+Everything you need for normal use is available directly from the top-level import:
+
+```python
+from aidweather import (
+    PowerClient,           # NASA POWER API client with SQLite cache
+    GeoCoordinate,         # Type-safe lat/lon value object
+    normalize_coord_input, # Accepts DMS, DDM, DD strings or raw floats
+    cfg,                   # Singleton config object
+    get_config,            # Alternative accessor for cfg
+    ensure_date_column,    # Robust DataFrame date column normalization
+)
+```
 
 ---
 
-## Purpose
-The top-level entry point for the `aidweather` package. It exposes the primary public-facing classes and functions, making them available directly from the `aidweather` namespace.
+## Quick start
 
-## Key responsibilities
-- Exposing the core API for weather retrieval and data formatting.
-- Defining package metadata (`__version__`, `__author__`, `__url__`).
+```python
+from aidweather import PowerClient
 
-## Public API
+client = PowerClient(temporal_api="daily")
+df = client.get_point_data(
+    lat=-23.55,
+    lon=-46.63,
+    start="2023-01-01",
+    end="2023-12-31",
+    params=["T2M", "PRECTOTCORR"],
+)
+print(df.head())
+```
 
-### Classes
-- `PowerClient`: (Imported from `.client`) Client for fetching NASA POWER weather data.
-- `GeoCoordinate`: (Imported from `.geo`) Represents a geographic coordinate in decimal degrees.
+---
 
-### Functions
-- `normalize_coord_input()`: (Imported from `.geo`) Normalizes various common coordinate input formats into a GeoCoordinate object.
-- `ensure_date_column()`: (Imported from `.utils`) Robustly finds, parses, and standardizes a datetime column in a pandas DataFrame.
-- `get_config()`: (Imported from `.config`) Returns the singleton config instance.
+## What each module does
 
-### Objects
-- `cfg`: (Imported from `.config`) Singleton configuration object.
+| Module | Main export | Use it for |
+|---|---|---|
+| `client` | `PowerClient` | Fetching weather data (single point, multi-point, transect, regional) |
+| `geo` | `GeoCoordinate`, `normalize_coord_input` | Parsing, validating, and converting coordinates |
+| `config` | `cfg`, `get_config` | Accessing API URLs, parameter catalogues, cache settings |
+| `utils` | `ensure_date_column` | Standardizing date columns before merging with your own data |
 
-### Constants
-- `__version__`: Current package version.
-- `__author__`: Package author.
+---
 
-## Data flow and dependencies
-- **Internal imports**: Imports from submodules (`client`, `config`, `geo`, `utils`) to expose them.
-- **External dependencies**: `logging`.
+## Package metadata
 
-## Minimal usage example
 ```python
 import aidweather
 
-# Access core classes
-client = aidweather.PowerClient(temporal_api="daily")
-print(f"AidWeather version: {aidweather.__version__}")
+print(aidweather.__version__)  # e.g., "0.1.0"
+print(aidweather.__author__)
+print(aidweather.__url__)
+```
+
+---
+
+## Logging
+
+`aidweather` uses Python's standard `logging` module internally and adds a `NullHandler` at the package level so you won't see unexpected output unless you configure a handler yourself.
+
+To enable debug output in your own application:
+
+```python
+import logging
+logging.basicConfig(level=logging.INFO)
 ```

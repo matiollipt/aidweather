@@ -1,53 +1,92 @@
-# config
+# Configuration
 
-> [!NOTE]
-> **AidWeather Project Context**
-> **Mission**: Weather data retrieval and validation for agricultural applications.
-> **Key Features**: Modular architecture, production-ready caching, and end-to-end NASA POWER integration.
-> **NASA POWER Compliance**: See [NASA_POWER_Licence_Usage.md](NASA_POWER_Licence_Usage.md) for data usage rights.
+`aidweather` loads its settings from a bundled `assets/config.json` file on import. You don't need to touch this file for normal use — sensible defaults are in place and the package never fails to import even if the file is missing.
+
+The main thing most users will want to configure is the **cache location**.
 
 ---
 
-## Purpose
-Provides a centralized configuration management system for the package. It loads settings from `assets/config.json` and exposes them via a singleton object `cfg`. It handles API endpoints, caching preferences, logging, and parameter maps.
+## Cache path
 
-## Key responsibilities
-- Loading and parsing the JSON configuration.
-- Providing type-safe accessors for config sections.
-- Defining default values for critical settings (like API URLs).
-- Managing access to package resources.
+The cache database lives at a platform-appropriate user directory by default:
 
-## Public API
+| Platform | Default path |
+|---|---|
+| Linux | `~/.cache/aidweather/aidweather_cache.db` |
+| macOS | `~/Library/Caches/aidweather/aidweather_cache.db` |
+| Windows | `%LOCALAPPDATA%\aidweather\Cache\aidweather_cache.db` |
 
-### Objects
-- `cfg`: The singleton instance of `_Config` used to access settings.
+This is a **shared cache** — all your projects using `aidweather` on the same machine read from and write to the same file. That's intentional: NASA POWER data for a given location and date range is the same regardless of which project asked for it.
 
-### Classes
-- `_Config`: (Internal use, but exposed via `cfg`)
-  - `get(key_path: str, default: Any = None) -> Any`: Access nested config values using dot notation.
-  - `get_url(temporal_api: str, endpoint_type: str = "point") -> str`: Returns the NASA POWER API URL.
-  - `params(group: str = "default") -> Dict[str, str]`: Returns parameter mappings for a given group.
-  - `cache_config() -> Dict[str, object]`: Returns caching configuration (enabled, path).
-  - `logging_config() -> Dict[str, object]`: Returns logging configuration (enabled, filename, level).
-  - `api_limits() -> Dict[str, object]`: Returns the NASA POWER API constraint configuration.
+### Overriding the cache location
 
-## Data flow and dependencies
-- **Internal imports**: `json`, `logging`, `os`, `importlib.resources`.
-- **Assets**: Loads `aidweather/assets/config.json`.
-- **Downstream**: Used by `client.PowerClient` and `cli`.
+Set an environment variable before running your script or starting your server:
 
-## Configuration and assets
-- **`assets/config.json`**: Primary source of settings.
-- **Defaults**: Hardcoded fallbacks for API URLs if the JSON is missing or incomplete.
-
-## Minimal usage example
-```python
-from aidweather.config import cfg
-
-# Get API URL
-url = cfg.get_url("daily", "point")
-
-# Get cache settings
-if cfg.cache_config().get("enabled"):
-    print("Caching is enabled")
+```bash
+export AIDWEATHER_CACHE_DIR=/data/shared/aidweather_cache
 ```
+
+Or put it in a `.env` file in your project root — `PowerClient` loads `.env` automatically.
+
+Priority order when resolving the path:
+1. `AIDWEATHER_CACHE_DIR` environment variable
+2. An absolute `path` key in `config.json` (project-level override)
+3. Platform default (see table above)
+
+---
+
+## API key
+
+Set your NASA POWER API key as an environment variable:
+
+```bash
+NASA_POWER_API_KEY=your_key_here
+```
+
+Or in a `.env` file in the project root. Without a key, the client uses IP-based limits (30,000 requests/day shared across all users on your IP).
+
+---
+
+## Accessing config values in code
+
+The singleton `cfg` object provides dot-notation access to all settings:
+
+```python
+from aidweather import cfg
+
+# Get a nested value
+daily_url = cfg.get_url("daily", "point")
+
+# Get the resolved cache settings
+cache = cfg.cache_config()
+print(cache["path"])     # resolved cache directory
+print(cache["enabled"])  # True by default
+
+# Get parameter metadata
+params = cfg.params(group="default")   # {code: name} dict
+all_params = cfg.params(group="all")
+descriptions = cfg.param_descriptions()
+
+# Get logging config
+log = cfg.logging_config()
+```
+
+---
+
+## config.json sections
+
+| Section | What it contains |
+|---|---|
+| `base_urls` | NASA POWER endpoint URLs (daily/hourly, point/regional) |
+| `params` | Parameter code → short name mappings, grouped as `all` and `default` |
+| `param_descriptions` | Full agronomic descriptions per parameter code |
+| `api_limits` | Max parameters per request type |
+| `cache_config` | `enabled` flag (path is resolved by Python, not set here) |
+| `logging_config` | File log settings (`filename`, `level`) |
+| `color_map` | Hex colors per parameter for downstream visualization packages |
+
+---
+
+## Ecosystem extension
+
+Downstream packages (`aidviz`, `aidfarm`) can store their own defaults under top-level keys in `config.json` and retrieve them with `cfg.get("aidviz.dpi")`. The `cfg` singleton is the single source of truth for the whole `aid*` ecosystem.

@@ -1,66 +1,149 @@
-# client
+# PowerClient
 
-> [!NOTE]
-> **AidWeather Project Context**
-> **Mission**: Weather data retrieval and validation for agricultural applications.
-> **Key Features**: Modular architecture, production-ready caching, and end-to-end NASA POWER integration.
-> **NASA POWER Compliance**: See [NASA_POWER_Licence_Usage.md](NASA_POWER_Licence_Usage.md) for data usage rights.
+`PowerClient` is the main way to get weather data out of NASA POWER. Give it a location, a date range, and a list of parameters — it returns a clean pandas DataFrame.
+
+It handles caching, retries, and parallel fetching for you. You don't need to think about API keys for basic use, but registering one removes the rate-limit ceiling.
 
 ---
 
-## Purpose
-
-Provides a robust client (`PowerClient`) for accessing the NASA POWER API. It handles data fetching, parsing, caching (via SQLite), and automatic retries.
-
-## Key responsibilities
-
-- Fetching daily or hourly weather/solar data.
-- Caching API responses to `aidweather_cache.db` to minimize network calls.
-- Handling retries with exponential backoff.
-- merging and deduplicating data from multiple fetch operations.
-- Parallel fetching for multiple points.
-
-## Public API
-
-### Classes
-
-- `PowerClient`:
-  - `__init__(temporal_api="daily", session=None)`: Initializes client and cache.
-  - `get_point_data(lat, lon, start, end, params, elevation=None) -> pd.DataFrame`: Fetches data for a single point.
-  - `get_point_data_from_coordinate(coord, start, end, params, elevation=None) -> pd.DataFrame`: Same as above but using `GeoCoordinate`.
-  - `get_multi_point_data(points, start, end, params, max_workers=8) -> Tuple[pd.DataFrame, List]`: Parallel fetch for list of points. Returns (combined_df, failed_points).
-  - `get_regional_data(lat_lon_list, start, end, params) -> pd.DataFrame`: Fetches data from regional endpoint.
-  - `get_expanded_point_data(lat, lon, start, end, params, axis="lat", distance_km=10.0, num_points=10, ...) -> pd.DataFrame`: Generates a transect of points and fetches data for them.
-
-## Data flow and dependencies
-
-- **Internal imports**: `cfg` (configuration), `GeoCoordinate` (from `.geo`).
-- **External dependencies**: `requests`, `pandas`, `numpy`, `sqlite3`, `gzip`, `hashlib`, `concurrent.futures`.
-- **Cache**: Stores data in `<cache_path>/aidweather_cache.db`.
-
-## Configuration and assets
-
-- **Config**:
-  - `cfg.get_url()`: Resolves API endpoints.
-  - `cfg.cache_config()`: Determines if caching is enabled (`enabled`) and where to store the DB (`path`).
-
-## Error handling and edge cases
-
-- **Network Errors**: Uses a custom `requests.Session` with `Retry` (backoff factor 0.5) for transient errors (429, 50x).
-- **Cache Failures**: If SQLite fails (init, read, or write), logs warnings and falls back to direct API usage without crashing.
-- **Empty Responses**: Returns empty DataFrames or DataFrames filled with NaNs if API returns no data for a range.
-- **Partial Cache Hits**: Identifies missing date ranges and only fetches those from the API, merging with cached data.
-
-## Minimal usage example
+## Basic usage
 
 ```python
 from aidweather import PowerClient
 
 client = PowerClient(temporal_api="daily")
+
 df = client.get_point_data(
-    lat=34.05, lon=-118.25,
-    start="20230101", end="20230110",
-    params=["T2M"]
+    lat=-23.55,
+    lon=-46.63,
+    start="2023-01-01",
+    end="2023-12-31",
+    params=["T2M", "PRECTOTCORR", "RH2M"],
 )
 print(df.head())
 ```
+
+The result is a DataFrame indexed by date, with one column per parameter.
+
+---
+
+## Temporal resolution
+
+| Value | What it returns |
+|---|---|
+| `"daily"` | Daily averages, min/max, totals (default) |
+| `"hourly"` | Hourly values — max 15 parameters per request |
+
+```python
+client = PowerClient(temporal_api="hourly")
+```
+
+---
+
+## API key
+
+Without a key, requests run against IP-based limits (30,000 req/day, shared). For production workflows, register a free key at [NASA POWER](https://power.larc.nasa.gov/) and set it in your environment:
+
+```bash
+# .env file or shell
+NASA_POWER_API_KEY=your_key_here
+```
+
+The client loads `.env` automatically from the current directory, so no extra setup is needed.
+
+---
+
+## Caching
+
+By default, responses are cached in a local SQLite database at your platform's user cache directory:
+
+- Linux: `~/.cache/aidweather/aidweather_cache.db`
+- macOS: `~/Library/Caches/aidweather/aidweather_cache.db`
+
+The cache is shared across all projects, so if you query São Paulo daily temperature twice from two different scripts, the second call is instant. Data is stored gzip-compressed.
+
+To use a different location, set an environment variable before running:
+
+```bash
+export AIDWEATHER_CACHE_DIR=/your/shared/cache
+```
+
+Check the current cache state any time with:
+
+```bash
+aidweather cache info
+```
+
+---
+
+## Fetching multiple points
+
+```python
+points = [
+    {"lat": -23.55, "lon": -46.63, "name": "São Paulo"},
+    {"lat": -22.90, "lon": -43.17, "name": "Rio de Janeiro"},
+]
+
+df, failed = client.get_multi_point_data(
+    points=points,
+    start="2023-01-01",
+    end="2023-12-31",
+    params=["T2M", "PRECTOTCORR"],
+    max_workers=5,
+)
+```
+
+Returns a combined DataFrame with `lat`, `lon`, and `name` columns added, plus a list of any points that failed.
+
+> Keep `max_workers` at or below 5. NASA explicitly discourages high concurrency from a single IP.
+
+---
+
+## Fetching a spatial transect
+
+Generates a line of evenly spaced points expanding from a center coordinate and fetches them in parallel.
+
+```python
+df = client.get_expanded_point_data(
+    lat=-23.55,
+    lon=-46.63,
+    start="2023-01-01",
+    end="2023-01-31",
+    params=["T2M"],
+    axis="lat",       # expand along latitude
+    distance_km=100,  # total transect length
+    num_points=10,
+)
+```
+
+---
+
+## Getting a summary
+
+After fetching, call `summarize()` to print Rich-formatted tables covering data coverage, missing values, cache performance, and API connection state:
+
+```python
+df = client.get_point_data(...)
+client.summarize(df)
+```
+
+---
+
+## Parameters cap
+
+| Resolution | Max parameters per request |
+|---|---|
+| Daily | 20 |
+| Hourly | 15 |
+| Regional (daily) | 1 |
+
+The client raises a `ValueError` before the request if you exceed these limits.
+
+---
+
+## Error behavior
+
+- **Network failures**: retried automatically (HTTP 429, 500, 502, 503, 504) with exponential backoff.
+- **Cache failure**: logs a warning and falls back to live API — never crashes.
+- **Stale cache on network error**: if the API is unreachable and cached data exists, the cached data is returned with a warning.
+- **Empty response**: returns a DataFrame filled with `NaN` for the requested date range and columns.

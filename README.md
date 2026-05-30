@@ -1,8 +1,8 @@
 # aidweather
 
-**Weather data retrieval and validation for agricultural applications.**
+**Weather data retrieval and validation from NASA POWER API**
 
-`aidweather` is a focused, production-grade Python library for fetching, caching, and validating daily and hourly meteorological data from [NASA's POWER API](https://power.larc.nasa.gov/). It provides a clean public API, a local SQLite cache, a Typer/Rich CLI, and robust geospatial coordinate utilities.
+`aidweather` is a Python library for fetching, caching, and validating daily and hourly meteorological data from [NASA's POWER API](https://power.larc.nasa.gov/). The main user interfaces are a simple Python API, a CLI (see below), and utilities for geospatial coordinate operations.
 
 > [!IMPORTANT]
 > **NASA POWER Compliance:** Please review the [NASA POWER License and Data Usage Guidelines](docs/NASA_POWER_Licence_Usage.md) and our [API Usage & Guardrails](docs/aidweather_nasa_power_usage.md) before using this tool in production.
@@ -13,18 +13,31 @@ For a high-level understanding of how `aidweather` transforms geographic points 
 
 ## Installation
 
-### 1. Quick One-Liner (Linux / macOS)
-For a streamlined, production-grade setup that automatically detects your environment, creates a virtual environment, and installs `aidweather` (with optional developer tools) in a single command, run:
+### 1. Installation Script (Linux / macOS)
+The installation script below automatically detects your environment, creates a virtual environment and installs `aidweather` (with optional developer tools).
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash
 ```
 
-> [!TIP]
-> You can pass arguments directly to the installer script through curl using `-s --`. For example, to install developer tools and skip interactive prompts:
-> ```bash
-> curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash -s -- --dev -y
-> ```
+You can pass arguments directly to the installer script through curl using `-s --`. For example, to install developer tools and skip interactive prompts:
+
+- Install developer tools: `--dev`
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash -s -- --dev -y
+```
+
+- Install globally via pipx: `--pipx`
+```bash
+curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash -s -- --pipx
+```
+
+If installed using pipx, you can use:
+
+```bash
+aidweather fetch --lat -23.55 --lon -46.63 --start 2023-01-01 --end 2023-12-31 --resolution daily --elevation 800 --params T2M,PRECTOTCORR,RH2M --output weather_data.csv --format csv --summarize
+```
 
 ### 2. Global CLI Installation (pipx)
 If you want to use the `aidweather` CLI globally without manually managing virtual environments or risking dependency conflicts, use [pipx](https://github.com/pypa/pipx) to install it in an isolated user-level environment:
@@ -95,7 +108,7 @@ aidweather params list --group all
 # Describe a specific parameter
 aidweather params describe T2M
 
-# Cache management
+# Cache management-
 aidweather cache info
 aidweather cache clear --yes
 ```
@@ -117,7 +130,26 @@ from aidweather import (
 
 ## Configuration & Assets
 
-`aidweather` reads its settings from a bundled `assets/config.json`. The cache is stored by default at `~/.aidweather_cache/aidweather_cache.db`.
+`aidweather` reads its settings from a bundled `assets/config.json`. The cache is stored in your platform's user cache directory by default:
+
+| Platform | Default cache path |
+|---|---|
+| Linux | `~/.cache/aidweather/aidweather_cache.db` |
+| macOS | `~/Library/Caches/aidweather/aidweather_cache.db` |
+
+The cache is **shared across all your projects** — if you query the same location in two different scripts, the second call is instant.
+
+To use a custom location, set an environment variable:
+
+```bash
+export AIDWEATHER_CACHE_DIR=/your/shared/cache
+```
+
+Check your current cache state:
+
+```bash
+aidweather cache info
+```
 
 For a full breakdown of the configuration files, see [Assets](docs/ASSETS.md) and [Config](docs/config.md).
 

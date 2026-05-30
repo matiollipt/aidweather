@@ -1,45 +1,37 @@
 # Assets
 
-> [!NOTE]
-> **AidWeather Project Context**
-> **Mission**: Weather data retrieval and validation for agricultural applications.
-> **Key Features**: Modular architecture, production-ready caching, and end-to-end NASA POWER integration.
-> **NASA POWER Compliance**: See [NASA_POWER_Licence_Usage.md](NASA_POWER_Licence_Usage.md) for data usage rights.
+The `aidweather` package includes two bundled JSON files in `src/aidweather/assets/`. They are loaded automatically at import time using `importlib.resources`, so the package works correctly regardless of how it's installed (wheel, editable, zipimport).
 
 ---
 
-The `aidweather` package includes non-code assets located in `aidweather/assets/`. These files control configuration and model hyperparameters.
+## config.json
 
-## 1. config.json
+The central configuration file. Loaded by `aidweather.config` and accessible via the `cfg` singleton.
 
-**Purpose**: The central configuration file for the library. It is loaded by `aidweather.config`.
+**Sections:**
 
-**Key Sections**:
-- **`base_urls`**: Defines the endpoints for NASA POWER API (daily/hourly, point/regional).
-- **`params`**: Maps technical API parameter codes (e.g., "T2M") to human-readable names (e.g., "Temperature at 2 m").
-  - `all`: A comprehensive list of supported parameters.
-  - `default`: A subset of commonly used parameters.
-- **`param_descriptions`**: detailed descriptions for each parameter, used for documentation or tooltips.
-- **`color_map`**: Assigns specific hex colors to weather parameters for consistent visualization across downstream plots.
-- **`cache_config`**: Controls local caching behavior (`enabled`, `path`).
-- **`logging_config`**: Controls file logging (`filename`, `level`).
-- **`api_limits`**: Settings like `max_parameters_per_point_request`.
+- **`base_urls`** — NASA POWER API endpoint URLs for daily and hourly, point and regional requests.
+- **`params`** — Parameter code → short name mappings. Two groups: `"all"` (full catalogue) and `"default"` (a practical subset for common agricultural workflows).
+- **`param_descriptions`** — Full agronomic descriptions for each parameter, including data source, resolution, and agricultural relevance.
+- **`api_limits`** — Max parameters per request type (used for validation before requests are sent).
+- **`cache_config`** — `enabled` flag. The cache path itself is resolved by Python using `platformdirs` and the `AIDWEATHER_CACHE_DIR` env var — it is not stored here.
+- **`logging_config`** — File logging settings (`filename`, `level`).
+- **`color_map`** — Hex color per parameter for consistent visualization across downstream packages (`aidviz`).
 
-## 2. model_config.json
+---
 
-**Purpose**: Defines the default search spaces for hyperparameter tuning. It is exposed via `aidweather.config.get_model_config()` for downstream modeling packages.
+## model_config.json
 
-**Structure**:
-- Keys correspond to model class names (e.g., "RandomForest", "ElasticNet").
-- Values are dictionaries mapping parameter names (e.g., `model__n_estimators`) to values or distributions.
-- **Distributions**:
-  - `{"dist": "randint", "low": X, "high": Y}` maps to integer uniform distributions.
-  - `{"dist": "uniform", "loc": L, "scale": S}` maps to continuous uniform distributions.
-  - `{"dist": "loguniform", "a": A, "b": B}` maps to log-uniform distributions.
+Defines default hyperparameter search spaces for ML models. This file is not used by `aidweather` directly — it is exposed via `aidweather.config.get_model_config()` for downstream modeling packages such as `aidfarm`.
 
-**Example**:
+**Structure:** keys are model class names (e.g., `"RandomForest"`), values are parameter grids using distribution descriptors:
+
 ```json
-"RandomForest": {
+{
+  "RandomForest": {
     "model__n_estimators": {"dist": "randint", "low": 50, "high": 500}
+  }
 }
 ```
+
+Supported distributions: `randint`, `uniform`, `loguniform`.

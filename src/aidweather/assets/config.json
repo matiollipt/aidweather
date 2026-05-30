@@ -58,8 +58,7 @@
         "recommended_community": "AG"
     },
     "cache_config": {
-        "enabled": true,
-        "path": ".aidweather_cache"
+        "enabled": true
     },
     "logging_config": {
         "enabled": true,
