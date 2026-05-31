@@ -11,6 +11,7 @@ from typing import Annotated, Any
 
 import pandas as pd
 import typer
+from aidweather import __version__
 from aidweather.config import cfg
 from rich.console import Console
 from rich.table import Table
@@ -29,6 +30,35 @@ app.add_typer(cache_app, name="cache")
 
 console = Console()
 
+_SUPPORTED_OUTPUT_FORMATS = {"csv", "json", "parquet"}
+_EXTENSION_TO_FORMAT = {
+    ".csv": "csv",
+    ".json": "json",
+    ".parquet": "parquet",
+    ".pq": "parquet",
+}
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        console.print(f"aidweather {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=_version_callback,
+            is_eager=True,
+            help="Show the aidweather version and exit.",
+        ),
+    ] = False,
+) -> None:
+    """CLI entry point."""
+
 
 def _parse_date(date_str: str) -> str:
     """Parse date and return in YYYYMMDD format."""
@@ -40,21 +70,45 @@ def _parse_date(date_str: str) -> str:
         ) from e
 
 
-def _save_output(df: pd.DataFrame, output: Path | None, fmt: str) -> None:
+def _resolve_output_format(output: Path | None, fmt: str | None) -> str:
+    """Resolve output format from file extension first, then --format."""
+    fmt_normalized = fmt.lower() if fmt else None
+    if fmt_normalized is not None and fmt_normalized not in _SUPPORTED_OUTPUT_FORMATS:
+        raise typer.BadParameter(
+            f"Unsupported format '{fmt}'. Expected one of: csv, json, parquet."
+        )
+
+    if output is not None:
+        extension_format = _EXTENSION_TO_FORMAT.get(output.suffix.lower())
+        if extension_format is not None:
+            if fmt_normalized is not None and fmt_normalized != extension_format:
+                console.print(
+                    "[yellow]Warning:[/yellow] Output extension "
+                    f"'{output.suffix}' implies {extension_format}; ignoring "
+                    f"--format {fmt_normalized}."
+                )
+            return extension_format
+
+    return fmt_normalized or "csv"
+
+
+def _save_output(df: pd.DataFrame, output: Path | None, fmt: str | None) -> None:
     """Write DataFrame to the specified format."""
     if output is None:
         return
+
+    resolved_fmt = _resolve_output_format(output, fmt)
 
     # ensure parent dir exists
     output.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        if fmt == "csv":
+        if resolved_fmt == "csv":
             df.to_csv(output, index=df.index.name is not None)
             console.print(
                 f"[bold green]✅ Success:[/bold green] Data saved to {output.resolve()}"
             )
-        elif fmt == "json":
+        elif resolved_fmt == "json":
             # For JSON, we typically want records orientation. If date is index, reset it.
             if df.index.name:
                 df_to_save = df.reset_index()
@@ -64,13 +118,15 @@ def _save_output(df: pd.DataFrame, output: Path | None, fmt: str) -> None:
             console.print(
                 f"[bold green]✅ Success:[/bold green] Data saved to {output.resolve()}"
             )
-        elif fmt == "parquet":
+        elif resolved_fmt == "parquet":
             df.to_parquet(output)
             console.print(
                 f"[bold green]✅ Success:[/bold green] Data saved to {output.resolve()}"
             )
         else:
-            console.print(f"[bold red]❌ Error:[/bold red] Unsupported format '{fmt}'.")
+            console.print(
+                f"[bold red]❌ Error:[/bold red] Unsupported format '{resolved_fmt}'."
+            )
     except Exception as exc:
         console.print(f"[bold red]❌ Error saving to file:[/bold red] {exc}")
         raise typer.Exit(code=1)
@@ -106,8 +162,15 @@ def fetch(  # noqa: PLR0913
         Path | None, typer.Option("--output", help="Optional path to save data.")
     ] = None,
     fmt: Annotated[
-        str, typer.Option("--format", help="Output format: 'csv', 'json', 'parquet'.")
-    ] = "csv",
+        str | None,
+        typer.Option(
+            "--format",
+            help=(
+                "Output format when --output has no recognized extension: "
+                "'csv', 'json', or 'parquet'."
+            ),
+        ),
+    ] = None,
     no_preview: Annotated[
         bool, typer.Option("--no-preview", help="Suppress data preview table.")
     ] = False,
@@ -200,8 +263,15 @@ def fetch_multi(  # noqa: PLR0913
         Path | None, typer.Option("--output", help="Optional path to save data.")
     ] = None,
     fmt: Annotated[
-        str, typer.Option("--format", help="Output format: 'csv', 'json', 'parquet'.")
-    ] = "csv",
+        str | None,
+        typer.Option(
+            "--format",
+            help=(
+                "Output format when --output has no recognized extension: "
+                "'csv', 'json', or 'parquet'."
+            ),
+        ),
+    ] = None,
     no_preview: Annotated[
         bool, typer.Option("--no-preview", help="Suppress data preview table.")
     ] = False,
@@ -308,8 +378,15 @@ def fetch_transect(  # noqa: PLR0913
         Path | None, typer.Option("--output", help="Optional path to save data.")
     ] = None,
     fmt: Annotated[
-        str, typer.Option("--format", help="Output format: 'csv', 'json', 'parquet'.")
-    ] = "csv",
+        str | None,
+        typer.Option(
+            "--format",
+            help=(
+                "Output format when --output has no recognized extension: "
+                "'csv', 'json', or 'parquet'."
+            ),
+        ),
+    ] = None,
     no_preview: Annotated[
         bool, typer.Option("--no-preview", help="Suppress data preview table.")
     ] = False,

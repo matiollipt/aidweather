@@ -14,6 +14,13 @@ def test_help():
     assert "NASA POWER" in result.stdout
 
 
+def test_version():
+    """Test that the CLI exposes a top-level version option."""
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert "aidweather 0.1.0" in result.stdout
+
+
 def test_params_list():
     """Test 'params list' sub-command."""
     result = runner.invoke(app, ["params", "list"])
@@ -133,6 +140,79 @@ def test_fetch_success(mock_client_class, tmp_path):
     assert result.exit_code == 0
     assert "Data saved to" in result.stdout
     assert output_csv.exists()
+
+
+@patch("aidweather.cli.PowerClient")
+def test_fetch_output_extension_overrides_format(mock_client_class, tmp_path):
+    """A .csv output path should produce CSV even if --format json is passed."""
+    mock_client = mock_client_class.return_value
+    dummy_df = pd.DataFrame(
+        {"T2M": [15.0, 16.0]}, index=pd.to_datetime(["2023-01-01", "2023-01-02"])
+    )
+    dummy_df.index.name = "date"
+    mock_client.get_point_data.return_value = dummy_df
+
+    output_csv = tmp_path / "weather.csv"
+    result = runner.invoke(
+        app,
+        [
+            "fetch",
+            "--lat",
+            "12.3",
+            "--lon",
+            "45.6",
+            "--start",
+            "2023-01-01",
+            "--end",
+            "2023-01-02",
+            "--output",
+            str(output_csv),
+            "--format",
+            "json",
+            "--no-preview",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "ignoring --format json" in result.stdout
+    saved = pd.read_csv(output_csv)
+    assert "date" in saved.columns
+    assert saved["T2M"].tolist() == [15.0, 16.0]
+
+
+@patch("aidweather.cli.PowerClient")
+def test_fetch_output_without_extension_uses_format(mock_client_class, tmp_path):
+    """When there is no recognized extension, --format still selects the writer."""
+    mock_client = mock_client_class.return_value
+    dummy_df = pd.DataFrame(
+        {"T2M": [15.0]}, index=pd.to_datetime(["2023-01-01"])
+    )
+    dummy_df.index.name = "date"
+    mock_client.get_point_data.return_value = dummy_df
+
+    output_path = tmp_path / "weather-data"
+    result = runner.invoke(
+        app,
+        [
+            "fetch",
+            "--lat",
+            "12.3",
+            "--lon",
+            "45.6",
+            "--start",
+            "2023-01-01",
+            "--end",
+            "2023-01-01",
+            "--output",
+            str(output_path),
+            "--format",
+            "json",
+            "--no-preview",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert output_path.read_text().startswith("[")
 
 
 @patch("aidweather.cli.PowerClient")
