@@ -5,7 +5,7 @@ aidweather
 
 Weather data retrieval and validation for agricultural applications.
 
-Provides a production-grade client for NASA's POWER API, with a local SQLite cache,
+Provides a beta-ready client for NASA's POWER API, with a local SQLite cache,
 retry logic, parallel fetching, geospatial coordinate utilities, and a CLI.
 
 Quick start:

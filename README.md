@@ -11,6 +11,12 @@ For a high-level understanding of how `aidweather` transforms geographic points 
 
 ---
 
+## Beta Status
+
+`aidweather` is in beta. The public API exposed from `aidweather.__init__` is intended to be usable for early scientific and agricultural workflows, but details around CLI output, cache internals, and future ecosystem integrations may still change before a stable 1.0 release. Please report confusing behavior, missing NASA POWER parameters, and documentation gaps in the project issue tracker.
+
+NASA POWER remains the authoritative source for data availability, parameter definitions, and service limits. API keys can improve reliability and attribution, but they do not remove NASA POWER usage policies or rate limits.
+
 ## Installation
 
 ### 1. Installation Script (Linux / macOS)
@@ -59,13 +65,21 @@ pip install aidweather
 ```
 
 ### 4. Local Development Installation
-For custom development, clone the repository and run the setup script locally. For more details on the testing suite, see the [Test Coverage](docs/TEST_COVERAGE.md) document.
+For custom development, clone the repository and run the setup script locally.
 
 ```bash
 git clone https://github.com/matiollipt/aidweather.git
 cd aidweather
 ./install.sh --dev
 ```
+
+Run the beta test gate with:
+
+```bash
+uv run --with-editable . --extra test pytest -q
+```
+
+Before publishing, follow the [Release Checklist](docs/release_checklist.md).
 
 ## Quick Start
 
@@ -178,12 +192,16 @@ NASA_POWER_API_KEY=your_key_here
 | `aidviz` *(coming soon)* | Custom agricultural weather plots |
 | `aidfarm` *(coming soon)* | EDA, feature engineering, ML for farm data |
 
-Install future packages alongside `aidweather`:
+The future `aidviz` and `aidfarm` packages are roadmap items. Their package extras are reserved in the metadata, but they do not install additional dependencies in this beta.
 
-```bash
-pip install aidweather[aidviz]
-pip install aidweather[aidfarm]
-pip install aidweather[all]
+## Citation & Attribution
+
+When publishing analyses based on data retrieved with `aidweather`, cite NASA POWER as the data provider and mention the package version used in your workflow.
+
+Suggested acknowledgement:
+
+```text
+Weather and solar data were obtained from the NASA POWER Project using aidweather v0.1.0.
 ```
 
 ## License

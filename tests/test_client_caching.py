@@ -55,3 +55,65 @@ def test_caching_logic(mock_cache_config):
         # 3. Verify DB persistence
         db_path = os.path.join(mock_cache_config, "aidweather_cache.db")
         assert os.path.exists(db_path)
+
+
+def test_cache_fetches_and_merges_missing_date_ranges(mock_cache_config):
+    """A broader request should reuse cached dates and fetch only missing edges."""
+    params = ["T2M"]
+    cached_response = {"properties": {"parameter": {"T2M": {"20230102": 26.0}}}}
+    start_response = {"properties": {"parameter": {"T2M": {"20230101": 25.0}}}}
+    end_response = {"properties": {"parameter": {"T2M": {"20230103": 27.0}}}}
+
+    with requests_mock.Mocker() as m:
+        m.get(
+            requests_mock.ANY,
+            [
+                {"json": cached_response},
+                {"json": start_response},
+                {"json": end_response},
+            ],
+        )
+
+        client = PowerClient(temporal_api="daily")
+        first = client.get_point_data(
+            lat=10.0, lon=20.0, start="20230102", end="20230102", params=params
+        )
+        expanded = client.get_point_data(
+            lat=10.0, lon=20.0, start="20230101", end="20230103", params=params
+        )
+
+    assert m.call_count == 3
+    assert list(first.index) == [pd.Timestamp("2023-01-02")]
+    assert list(expanded.index) == list(pd.date_range("2023-01-01", "2023-01-03"))
+    assert expanded["T2M"].tolist() == [25.0, 26.0, 27.0]
+
+
+def test_stale_cache_returned_when_missing_range_fetch_fails(mock_cache_config):
+    """If a cache entry exists, a failed refresh should return available stale data."""
+    params = ["T2M"]
+    cached_response = {
+        "properties": {
+            "parameter": {"T2M": {"20230101": 25.0, "20230102": 26.0}}
+        }
+    }
+
+    with requests_mock.Mocker() as m:
+        m.get(
+            requests_mock.ANY,
+            [
+                {"json": cached_response},
+                {"status_code": 500, "text": "Server Error"},
+            ],
+        )
+
+        client = PowerClient(temporal_api="daily")
+        client.get_point_data(
+            lat=10.0, lon=20.0, start="20230101", end="20230102", params=params
+        )
+        stale = client.get_point_data(
+            lat=10.0, lon=20.0, start="20230101", end="20230103", params=params
+        )
+
+    assert m.call_count == 2
+    assert list(stale.index) == list(pd.date_range("2023-01-01", "2023-01-02"))
+    assert stale["T2M"].tolist() == [25.0, 26.0]

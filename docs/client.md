@@ -1,8 +1,8 @@
 # PowerClient
 
-`PowerClient` is the main way to get weather data out of NASA POWER. Give it a location, a date range, and a list of parameters — it returns a clean pandas DataFrame.
+`PowerClient` is the main way to get weather data out of NASA POWER. Give it a location, a date range, and a list of parameters, and it returns a clean pandas DataFrame.
 
-It handles caching, retries, and parallel fetching for you. You don't need to think about API keys for basic use, but registering one removes the rate-limit ceiling.
+It handles caching, retries, and parallel fetching for you. You don't need an API key for basic use, but registering one is recommended for regular work. API keys improve reliability and attribution; they do not remove NASA POWER service limits or usage policies.
 
 ---
 
@@ -38,11 +38,13 @@ The result is a DataFrame indexed by date, with one column per parameter.
 client = PowerClient(temporal_api="hourly")
 ```
 
+For hourly requests, pass `start` and `end` dates for the NASA POWER request window. Returned rows are hourly when the API response contains hourly keys.
+
 ---
 
 ## API key
 
-Without a key, requests run against IP-based limits (30,000 req/day, shared). For production workflows, register a free key at [NASA POWER](https://power.larc.nasa.gov/) and set it in your environment:
+Without a key, requests run against IP-based limits that may be shared with other users on the same network. For repeated workflows, register a free key at [NASA POWER](https://power.larc.nasa.gov/) and set it in your environment:
 
 ```bash
 # .env file or shell

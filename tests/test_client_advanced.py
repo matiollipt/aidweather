@@ -92,6 +92,7 @@ def test_get_regional_data_success(mock_session):
     assert not df.empty
     # Regional endpoint parses the custom regional geo features list
     assert "T2M" in df.columns
+    assert mock_session.last_request.qs["lonlat"] == ["10.0,20.0"]
 
 
 def test_get_regional_data_from_coordinates_success(mock_session):
@@ -110,6 +111,7 @@ def test_get_regional_data_from_coordinates_success(mock_session):
 
     assert not df.empty
     assert "T2M" in df.columns
+    assert mock_session.last_request.qs["lonlat"] == ["10.0,20.0"]
 
 
 def test_get_expanded_point_data_success(mock_session):
