@@ -11,27 +11,12 @@
 
 set -eu
 
-# ── Colour helpers (stripped when stdout is not a terminal) ──────────────────
-if [ -t 1 ]; then
-    GREEN='\033[1;32m'       # aid
-    ORANGE='\033[38;5;214m'  # weather
-    PURPLE='\033[1;35m'      # accents / separators
-    BLUE='\033[1;34m'
-    YELLOW='\033[1;33m'
-    RED='\033[1;31m'
-    BOLD='\033[1m'
-    NC='\033[0m'
-else
-    GREEN=''; ORANGE=''; PURPLE=''; BLUE=''; YELLOW=''; RED=''; BOLD=''; NC=''
-fi
+info()  { printf 'info: %s\n' "$1"; }
+ok()    { printf 'ok: %s\n' "$1"; }
+warn()  { printf 'warning: %s\n' "$1"; }
+die()   { printf 'error: %s\n' "$1" >&2; exit 1; }
 
-info()  { printf '%b▸%b  %s\n'        "$BLUE"   "$NC" "$1"; }
-ok()    { printf '%b✔%b  %s\n'        "$GREEN"  "$NC" "$1"; }
-warn()  { printf '%b⚠%b  %s\n'        "$YELLOW" "$NC" "$1"; }
-die()   { printf '%b✖  Error:%b %s\n' "$RED"    "$NC" "$1" >&2; exit 1; }
-sep()   { printf '%b%s%b\n' "$PURPLE" "────────────────────────────────────────────────" "$NC"; }
-
-# ── Defaults ──────────────────────────────────────────────────────────────────
+# Defaults
 DEV_MODE=false
 USE_VENV=true
 VENV_PATH=".venv"
@@ -39,9 +24,9 @@ CLEAN_VENV=false
 AUTO_YES=false
 USE_PIPX=false
 
-# ── Help ──────────────────────────────────────────────────────────────────────
+# Help
 show_help() {
-    printf '\n%baidweather%b Installer\n\n' "$GREEN$BOLD" "$NC"
+    printf '\naidweather installer\n\n'
     printf 'Usage:\n'
     printf '  ./install.sh [options]\n\n'
     printf 'Options:\n'
@@ -60,7 +45,7 @@ show_help() {
     exit 0
 }
 
-# ── Argument parsing ──────────────────────────────────────────────────────────
+# Argument parsing
 while [ $# -gt 0 ]; do
     case "$1" in
         --pipx)         USE_PIPX=true;  shift ;;
@@ -74,43 +59,14 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# ── Banner (aid=green, weather=orange, accents=purple) ────────────────────────
-print_banner() {
-    printf '\n'
-    if command -v figlet > /dev/null 2>&1; then
-        # Dynamic: use figlet and split at column 21 (width of "aid")
-        figlet "aidweather" | while IFS= read -r line; do
-            aid_col="${line:0:21}"
-            wx_col="${line:21}"
-            printf '%b%s%b%b%s%b\n' "$GREEN" "$aid_col" "$NC" "$ORANGE" "$wx_col" "$NC"
-        done
-    else
-        # Pre-baked fallback (same figlet default font output)
-        printf '%b                     %b%b                                                 %b\n' "$GREEN" "$NC" "$ORANGE" "$NC"
-        printf '%b          "        # %b%b                        m    #                   %b\n' "$GREEN" "$NC" "$ORANGE" "$NC"
-        printf '%b  mmm   mmm     mmm# %b%bm     m  mmm    mmm   mm#mm  # mm    mmm    m mm %b\n' "$GREEN" "$NC" "$ORANGE" "$NC"
-        printf '%b "   #    #    #" "# %b%b"m m m" #"  #  "   #    #    #"  #  #"  #   #"  "%b\n' "$GREEN" "$NC" "$ORANGE" "$NC"
-        printf '%b m""#    #    #   # %b%b #m#m#  #""""  m"""#    #    #   #  #""""   #    %b\n' "$GREEN" "$NC" "$ORANGE" "$NC"
-        printf '%b "mm"#  mm#mm  "#m## %b%b  # #   "#mm"  "mm"#    "mm  #   #  "#mm"   #    %b\n' "$GREEN" "$NC" "$ORANGE" "$NC"
-        printf '%b                     %b%b                                                 %b\n' "$GREEN" "$NC" "$ORANGE" "$NC"
-    fi
-    printf '\n'
-    printf '  %baid%b%bweather%b  —  Weather Data Toolkit for Agriculture\n' \
-        "$GREEN$BOLD" "$NC" "$ORANGE$BOLD" "$NC"
-    sep
-    printf '\n'
-}
-
-print_banner
-
-# ── Detect context (clone vs in-repo) ─────────────────────────────────────────
+# Detect context (clone vs in-repo)
 if [ -f "pyproject.toml" ] && [ -d "src/aidweather" ]; then
     REPO_ROOT="$PWD"
 else
     REPO_ROOT="$PWD/aidweather"
 fi
 
-# ── Python detection ──────────────────────────────────────────────────────────
+# Python detection
 detect_python() {
     for cmd in python3 python; do
         if command -v "$cmd" > /dev/null 2>&1; then
@@ -129,15 +85,15 @@ PYTHON_BIN=$(detect_python) || die "Python 3.9+ required but not found. Please i
 PY_VER=$("$PYTHON_BIN" -c 'import sys; v=sys.version_info; print(f"{v.major}.{v.minor}.{v.micro}")')
 ok "Python $PY_VER  ($PYTHON_BIN)"
 
-# ── Bootstrap: clone if not inside the repo ───────────────────────────────────
+# Bootstrap: clone if not inside the repo
 if [ "$REPO_ROOT" != "$PWD" ]; then
-    info "Bootstrap mode — downloading/cloning aidweather..."
+    info "Bootstrap mode: downloading aidweather"
     [ -d "$REPO_ROOT" ] && rm -rf "$REPO_ROOT"
     
     if command -v git > /dev/null 2>&1; then
         git clone https://github.com/matiollipt/aidweather.git "$REPO_ROOT" \
             || die "Clone failed. Check your internet connection."
-        ok "Repository cloned → $REPO_ROOT"
+        ok "Repository cloned to $REPO_ROOT"
     elif command -v curl > /dev/null 2>&1 && command -v unzip > /dev/null 2>&1; then
         info "git not found. Falling back to downloading ZIP via curl..."
         curl -fsSL -o "$PWD/aidweather-main.zip" https://github.com/matiollipt/aidweather/archive/refs/heads/main.zip \
@@ -146,7 +102,7 @@ if [ "$REPO_ROOT" != "$PWD" ]; then
             || die "Failed to extract ZIP file."
         mv "$PWD/aidweather-main" "$REPO_ROOT"
         rm "$PWD/aidweather-main.zip"
-        ok "Repository downloaded and extracted → $REPO_ROOT"
+        ok "Repository downloaded and extracted to $REPO_ROOT"
     elif command -v wget > /dev/null 2>&1 && command -v unzip > /dev/null 2>&1; then
         info "git not found. Falling back to downloading ZIP via wget..."
         wget -q -O "$PWD/aidweather-main.zip" https://github.com/matiollipt/aidweather/archive/refs/heads/main.zip \
@@ -155,14 +111,14 @@ if [ "$REPO_ROOT" != "$PWD" ]; then
             || die "Failed to extract ZIP file."
         mv "$PWD/aidweather-main" "$REPO_ROOT"
         rm "$PWD/aidweather-main.zip"
-        ok "Repository downloaded and extracted → $REPO_ROOT"
+        ok "Repository downloaded and extracted to $REPO_ROOT"
     else
         die "Neither git nor curl/wget + unzip were found. Please install git or curl and unzip to proceed."
     fi
     cd "$REPO_ROOT" || exit 1
 fi
 
-# ── Virtual environment ───────────────────────────────────────────────────────
+# Virtual environment
 setup_venv() {
     case "$VENV_PATH" in
         /*) ABS_VENV="$VENV_PATH" ;;
@@ -210,29 +166,20 @@ if [ "$USE_VENV" = true ]; then
     setup_venv
 else
     if [ "$USE_PIPX" = true ]; then
-        info "Skipping standard venv — installing via pipx."
+        info "Skipping standard venv; installing via pipx"
     else
-        info "Skipping venv — using active/global Python."
+        info "Skipping venv; using active/global Python"
     fi
     ABS_VENV=""
 fi
 
-# ── Installation plan ─────────────────────────────────────────────────────────
-printf '\n'
-info "Installation plan"
-sep
 venv_label=$( [ "$USE_VENV" = true ] && echo "$VENV_PATH" || echo "global/active Python" )
 if [ "$USE_PIPX" = true ]; then
     venv_label="pipx (isolated user application)"
 fi
-printf '  %-18s %b%s%b\n' "Package:"     "$GREEN$BOLD" "aidweather" "$NC"
-printf '  %-18s %s\n'     "Environment:" "$venv_label"
-printf '  %-18s %s\n'     "Dev tools:"   "$DEV_MODE"
-if [ "$USE_PIPX" = false ]; then
-    printf '  %-18s %s\n'     "Clean venv:"  "$CLEAN_VENV"
-fi
-sep
-printf '\n'
+info "Installing aidweather"
+info "Environment: $venv_label"
+info "Developer tools: $DEV_MODE"
 
 if [ "$AUTO_YES" = false ]; then
     if [ -t 0 ] || [ -c /dev/tty ]; then
@@ -250,26 +197,24 @@ if [ "$AUTO_YES" = false ]; then
     fi
 fi
 
-# ── Install core package ──────────────────────────────────────────────────────
+# Install core package
 if [ "$USE_PIPX" = true ]; then
-    info "Installing aidweather via pipx..."
+    info "Installing package with pipx"
     if pipx list | grep -q "package aidweather"; then
-        info "aidweather already installed via pipx. Reinstalling..."
+        info "Existing pipx install found; reinstalling"
         pipx install --force .
     else
         pipx install .
     fi
-    ok "aidweather installed via pipx."
 else
-    info "Installing aidweather..."
+    info "Installing package"
     pip_install -e .
-    ok "aidweather installed."
 fi
 
-# ── Developer tools ───────────────────────────────────────────────────────────
+# Developer tools
 if [ "$DEV_MODE" = true ]; then
     if [ "$USE_PIPX" = true ]; then
-        info "Injecting developer tools into pipx environment..."
+        info "Installing developer tools into pipx environment"
         pipx inject aidweather \
             "pytest>=8.0.0" \
             "pytest-cov>=4.1.0" \
@@ -278,9 +223,8 @@ if [ "$DEV_MODE" = true ]; then
             "mypy>=1.9.0" \
             "build>=1.1.0" \
             "twine>=5.0.0"
-        ok "Developer tools injected."
     else
-        info "Installing developer tools..."
+        info "Installing developer tools"
         pip_install \
             "pytest>=8.0.0" \
             "pytest-cov>=4.1.0" \
@@ -289,24 +233,22 @@ if [ "$DEV_MODE" = true ]; then
             "mypy>=1.9.0" \
             "build>=1.1.0" \
             "twine>=5.0.0"
-        ok "Developer tools installed."
     fi
 fi
 
-# ── Smoke test ────────────────────────────────────────────────────────────────
-info "Running smoke test..."
+# Smoke test
+info "Checking installation"
 if [ "$USE_PIPX" = true ]; then
     # Try the standard pipx binary directory first to avoid other env pollution
     PIPX_LOCAL_BIN="${PIPX_BIN_DIR:-$HOME/.local/bin}/aidweather"
     if [ -f "$PIPX_LOCAL_BIN" ] && "$PIPX_LOCAL_BIN" --help > /dev/null 2>&1; then
-        ok "Smoke test passed: $PIPX_LOCAL_BIN CLI is available and responding."
         # Warn if it's not in PATH or not the active one
         if ! command -v aidweather > /dev/null 2>&1 || [ "$(command -v aidweather)" != "$PIPX_LOCAL_BIN" ]; then
             warn "Note: $PIPX_LOCAL_BIN is not the active 'aidweather' in your PATH (found $(command -v aidweather || echo 'none') instead)."
             warn "You may need to run 'pipx ensurepath' and restart your terminal."
         fi
     elif command -v aidweather > /dev/null 2>&1 && aidweather --help > /dev/null 2>&1; then
-        ok "Smoke test passed: aidweather CLI is available and responding."
+        :
     else
         die "Smoke test failed: Could not locate a working aidweather executable."
     fi
@@ -314,40 +256,22 @@ else
     "$PYTHON_BIN" - <<'PYEOF'
 import sys
 
-checks = [("aidweather", "aidweather")]
-failures = []
-
-for mod, label in checks:
-    try:
-        __import__(mod)
-        print(f"  ✔  {label}")
-    except ImportError as exc:
-        print(f"  ✖  {label}  ({exc})")
-        failures.append(label)
-
-if failures:
-    print(f"\n  {len(failures)} import(s) failed.")
+try:
+    __import__("aidweather")
+except ImportError:
     sys.exit(1)
-else:
-    print("\n  All imports OK.")
 
 PYEOF
 fi
 
-# ── Done ──────────────────────────────────────────────────────────────────────
-printf '\n'
-printf '%b══════════════════════════════════════════════════%b\n' "$GREEN" "$NC"
-printf '%b  ✔  %baid%b%bweather%b%b setup complete%b\n' \
-    "$GREEN$BOLD" "$NC" "$GREEN$BOLD" "$NC" "$ORANGE$BOLD" "$NC$BOLD" "$NC"
-printf '%b══════════════════════════════════════════════════%b\n\n' "$GREEN" "$NC"
+# Done
+printf 'aidweather installed successfully.\n'
 
 if [ "$USE_PIPX" = true ]; then
-    printf '  %bPackage installed globally via pipx.%b\n' "$PURPLE$BOLD" "$NC"
-    printf '  You can run the CLI directly:\n'
-    printf '    aidweather --help\n\n'
+    printf 'Run: aidweather --help\n'
     printf '  If the command is not found, ensure pipx binary path is in your PATH:\n'
     printf '    pipx ensurepath\n\n'
 elif [ "$USE_VENV" = true ]; then
-    printf '  %bActivate your environment:%b\n' "$PURPLE$BOLD" "$NC"
-    printf '    source %s/bin/activate\n\n' "$VENV_PATH"
+    printf 'Activate the environment with:\n'
+    printf '  source %s/bin/activate\n' "$VENV_PATH"
 fi
