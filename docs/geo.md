@@ -4,6 +4,9 @@ The `geo` module handles one job: turning geographic coordinates into a reliable
 
 In practice, field data arrives in all sorts of formats — GPS units output DMS, spreadsheets use decimal degrees, and legacy files sometimes mix the two. `GeoCoordinate` and `normalize_coord_input` absorb that variation so the rest of the code never has to deal with it.
 
+For a complete list of coordinate classes, parsers, formatters, and internal
+helpers, see the [API Inventory](api_inventory.md#aidweathergeo).
+
 ---
 
 ## GeoCoordinate

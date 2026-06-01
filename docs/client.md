@@ -25,6 +25,9 @@ print(df.head())
 
 The result is a DataFrame indexed by date, with one column per parameter.
 
+For a complete inventory of request models, public methods, and internal client
+helpers, see the [API Inventory](api_inventory.md#aidweatherclient).
+
 ---
 
 ## Temporal resolution

@@ -18,9 +18,9 @@ to a maximum of 20 daily or 15 hourly parameters. Regional area requests only su
 single-parameter downloads at this time.
 
 Key Features:
-- Standard wrapper for NASA's daily and hourly API endpoints.
-- Basic local SQLite cache to persist requested spatial-temporal ranges.
-- Basic retry logic using backoff algorithms for transient network failures.
+- Wrapper for NASA's daily and hourly API endpoints.
+- Local SQLite cache to persist requested spatial-temporal ranges.
+- Retry logic using backoff algorithms for transient network failures.
 - Parallel request utilities using safe concurrency levels to prevent IP blocks.
 
 Example:

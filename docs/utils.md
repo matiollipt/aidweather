@@ -4,6 +4,9 @@ The `utils` module exists because real-world data is messy. Farm records, sensor
 
 `ensure_date_column` handles all of that in one call and gives back a DataFrame with a clean, timezone-naive `datetime64[ns]` column you can rely on.
 
+For a complete list of utility classes, public helpers, and internal helpers,
+see the [API Inventory](api_inventory.md#aidweatherutils).
+
 ---
 
 ## ensure_date_column

@@ -4,6 +4,9 @@
 
 The main thing most users will want to configure is the **cache location**.
 
+For a complete list of config objects and accessors, see the
+[API Inventory](api_inventory.md#aidweatherconfig).
+
 ---
 
 ## Cache path

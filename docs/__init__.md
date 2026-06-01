@@ -15,6 +15,10 @@ from aidweather import (
 )
 ```
 
+For a complete callable-by-callable inventory of every class and function in the
+package, including internal helpers and CLI handlers, see the
+[API Inventory](api_inventory.md).
+
 ---
 
 ## Quick start
@@ -39,10 +43,11 @@ print(df.head())
 
 | Module | Main export | Use it for |
 |---|---|---|
-| `client` | `PowerClient` | Fetching weather data (single point, multi-point, transect, regional) |
-| `geo` | `GeoCoordinate`, `normalize_coord_input` | Parsing, validating, and converting coordinates |
-| `config` | `cfg`, `get_config` | Accessing API URLs, parameter catalogues, cache settings |
-| `utils` | `ensure_date_column` | Standardizing date columns before merging with your own data |
+| `client` | `PowerClient`, `PointRequest`, `ExpandedPointRequest` | Fetching weather data (single point, multi-point, transect, regional) |
+| `geo` | `GeoCoordinate`, `normalize_coord_input`, coordinate parsers | Parsing, validating, and converting coordinates |
+| `config` | `cfg`, `get_config`, `get_model_config` | Accessing API URLs, parameter catalogues, cache settings |
+| `utils` | `ensure_date_column`, `DateColumnOptions` | Standardizing date columns before merging with your own data |
+| `cli` | `aidweather` command handlers | Fetching, parameter lookup, cache management, and file output from the shell |
 
 ---
 

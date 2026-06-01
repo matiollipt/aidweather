@@ -138,6 +138,7 @@ aidweather cache clear --yes
 ## Public API
 
 The package exposes key modules for managing data integration. For a top-level overview, see the [\_\_init\_\_](docs/__init__.md) documentation.
+For a complete inventory of all package classes and functions, see the [API Inventory](docs/api_inventory.md).
 
 ```python
 from aidweather import (
