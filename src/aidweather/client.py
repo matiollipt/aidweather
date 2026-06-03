@@ -547,13 +547,15 @@ class PowerClient:
             self.db_conn = sqlite3.connect(db_path, timeout=10, check_same_thread=False)
 
             with self.db_conn:
-                self.db_conn.execute("""
+                self.db_conn.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS cache (
                         key TEXT PRIMARY KEY,
                         timestamp TEXT NOT NULL,
                         data BLOB NOT NULL
                     )
-                """)
+                """
+                )
         except sqlite3.Error as e:
             logger.error(f"Failed to initialize cache database at {db_path}: {e}")
             self.db_conn = None
