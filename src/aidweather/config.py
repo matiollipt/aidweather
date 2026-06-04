@@ -220,6 +220,3 @@ def get_config() -> _Config:
         The module-level ``cfg`` singleton.
     """
     return cfg
-
-
-

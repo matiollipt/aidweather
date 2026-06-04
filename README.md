@@ -4,66 +4,37 @@
 
 `aidweather` is a Python library for fetching, caching, and validating daily and hourly meteorological data from [NASA's POWER API](https://power.larc.nasa.gov/). The main user interfaces are a simple Python API, a CLI (see below), and utilities for geospatial coordinate operations.
 
-> [!IMPORTANT]
-> **NASA POWER Compliance:** Please review the [NASA POWER License and Data Usage Guidelines](docs/NASA_POWER_Licence_Usage.md) and our [API Usage & Guardrails](docs/aidweather_nasa_power_usage.md) before using this tool in production.
+> [!WARNING]
+> **Beta:** Public API and CLI output may change before 1.0. Please [report issues](https://github.com/matiollipt/aidweather/issues) — feedback is welcome.
 
-For a high-level understanding of how `aidweather` transforms geographic points into validated weather data, refer to the [Workflow Guide](docs/aidweather_workflow_guide.md).
+> [!IMPORTANT]
+> **NASA POWER Compliance:** Review the [License & Data Usage Guidelines](docs/NASA_POWER_Licence_Usage.md) and [API Usage & Guardrails](docs/aidweather_nasa_power_usage.md).
 
 ---
 
-## Beta Status
-
-`aidweather` is in beta. The public API exposed from `aidweather.__init__` is intended to be usable for early scientific and agricultural workflows, but details around CLI output and cache internals may still change before a stable 1.0 release. Please report confusing behavior, missing NASA POWER parameters, and documentation gaps in the project issue tracker.
-
-NASA POWER remains the authoritative source for data availability, parameter definitions, and service limits. API keys can improve reliability and attribution, but they do not remove NASA POWER usage policies or rate limits.
-
 ## Installation
 
-IMPORTANT: Use the script below with caution. It is always good to review scripts downloaded from the internet before running them. In this case, you can review the script in the [aidweather GitHub repository](https://github.com/matiollipt/aidweather/blob/main/install.sh)
-
-### 1. Installation Script (Linux / macOS)
-The installation script below automatically detects your environment, creates a virtual environment and installs `aidweather` (with optional developer tools).
+### Quick Install (Linux / macOS)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash
 ```
 
-You can pass arguments directly to the installer script through curl using `-s --`. For example, to install developer tools and skip interactive prompts:
+Optional flags passed via `-s --`:
 
-- Install developer tools: `--dev`
+| Flag | Description |
+|---|---|
+| `--dev` | Also install developer tools |
+| `--dev -y` | Developer tools, skip prompts |
+| `--pipx` | Install globally in an isolated environment via pipx |
+
+Example:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash -s -- --dev -y
 ```
 
-- Install globally via pipx: `--pipx`
-```bash
-curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash -s -- --pipx
-```
-
-If installed using pipx, you can use:
-
-```bash
-aidweather fetch --lat -23.55 --lon -46.63 --start 2023-01-01 --end 2023-12-31 --resolution daily --elevation 800 --params T2M,PRECTOTCORR,RH2M --output weather_data.csv --format csv --summarize
-```
-
-### 2. Global CLI Installation (pipx)
-If you want to use the `aidweather` CLI globally without manually managing virtual environments or risking dependency conflicts, use [pipx](https://github.com/pypa/pipx) to install it in an isolated user-level environment:
-
-```bash
-pipx install aidweather
-```
-
-You can also install it via the installer script using the `--pipx` flag, which can even be done remotely via curl:
-```bash
-curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash -s -- --pipx
-```
-
-### 3. Standard Pip Installation
-SOON! Not available yet. You can follow the progress on [Issue #1](https://github.com/matiollipt/aidweather/issues/1).
-
-### 4. Local Development Installation
-For custom development, clone the repository and run the setup script locally.
+### Local Development
 
 ```bash
 git clone https://github.com/matiollipt/aidweather.git
@@ -71,7 +42,7 @@ cd aidweather
 ./install.sh --dev
 ```
 
-Run the beta test gate with:
+Run the test suite:
 
 ```bash
 uv run --with-editable . --extra test pytest -q
