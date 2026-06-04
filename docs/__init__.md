@@ -1,23 +1,21 @@
-# aidweather — Package Overview
+# AidWeather — Package Overview
 
-`aidweather` retrieves, caches, and validates daily and hourly meteorological data from [NASA's POWER API](https://power.larc.nasa.gov/). It is designed as the foundational data ingestion layer for the `aid*` toolkit.
+`aidweather` retrieves, caches, and validates daily and hourly meteorological data from [NASA's POWER API](https://power.larc.nasa.gov/).
 
-Everything you need for normal use is available directly from the top-level import:
+The main components are available from the top-level import:
 
 ```python
 from aidweather import (
-    PowerClient,           # NASA POWER API client with SQLite cache
-    GeoCoordinate,         # Type-safe lat/lon value object
-    normalize_coord_input, # Accepts DMS, DDM, DD strings or raw floats
-    cfg,                   # Singleton config object
-    get_config,            # Alternative accessor for cfg
-    ensure_date_column,    # Robust DataFrame date column normalization
+    PowerClient,           # NASA POWER API client with smart SQLite cache
+    GeoCoordinate,         # Geographic coordinate (type-safe lat/lon)
+    normalize_coord_input, # Accepts coordinates in DMS, DDM, DD strings or raw floats
+    cfg,                   # Config object (singleton)
+    get_config,            # Returns the config object (singleton)
+    ensure_date_column,    # Convert date-like entries in DataFrame to datetime64[ns]
 )
 ```
 
-For a complete callable-by-callable inventory of every class and function in the
-package, including internal helpers and CLI handlers, see the
-[API Inventory](api_inventory.md).
+For a complete inventory of every class and function in the package, see the [API Inventory](api_inventory.md).
 
 ---
 
@@ -45,7 +43,7 @@ print(df.head())
 |---|---|---|
 | `client` | `PowerClient`, `PointRequest`, `ExpandedPointRequest` | Fetching weather data (single point, multi-point, transect, regional) |
 | `geo` | `GeoCoordinate`, `normalize_coord_input`, coordinate parsers | Parsing, validating, and converting coordinates |
-| `config` | `cfg`, `get_config`, `get_model_config` | Accessing API URLs, parameter catalogues, cache settings |
+| `config` | `cfg`, `get_config` | Accessing API URLs, parameter catalogues, cache settings |
 | `utils` | `ensure_date_column`, `DateColumnOptions` | Standardizing date columns before merging with your own data |
 | `cli` | `aidweather` command handlers | Fetching, parameter lookup, cache management, and file output from the shell |
 
@@ -56,7 +54,7 @@ print(df.head())
 ```python
 import aidweather
 
-print(aidweather.__version__)  # e.g., "0.1.0"
+print(aidweather.__version__)
 print(aidweather.__author__)
 print(aidweather.__url__)
 ```

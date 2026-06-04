@@ -18,19 +18,13 @@ def test_config_methods_group_and_description():
     assert isinstance(desc, dict)
 
 
-def test_config_logging_and_visualization_defaults():
+def test_config_logging_defaults():
     config = cfg
     # logging_config should have enabled flag and level
     log_cfg = config.logging_config()
     assert isinstance(log_cfg, dict)
     assert "enabled" in log_cfg
     assert "level" in log_cfg
-    # visualization returns dict with default_theme None
-    vis_cfg = config.visualization()
-    assert vis_cfg["default_theme"] is None
-    # user_theme key should be present if configured
-    if "user_theme" in vis_cfg:
-        assert vis_cfg["user_theme"] is not None
 
 
 def test_config_load_real_file(tmp_path, monkeypatch):

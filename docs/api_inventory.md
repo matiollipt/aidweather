@@ -197,8 +197,6 @@ needed.
 | `param_descriptions()` | Return full agronomic descriptions keyed by parameter code. |
 | `cache_config()` | Return cache settings with environment-aware path resolution. |
 | `logging_config()` | Return logging settings with defaults. |
-| `visualization(key=None, default=None)` | Return visualization defaults or one visualization key. |
-| `color_map()` | Return canonical parameter colors. |
 | `api_limits()` | Return API limit metadata from config. |
 
 Module functions:
@@ -206,7 +204,6 @@ Module functions:
 | Name | Purpose |
 |---|---|
 | `get_config()` | Return the `cfg` singleton. |
-| `get_model_config()` | Load `assets/model_config.json` for downstream modeling packages. |
 | `_load_config_dict()` | Load `assets/config.json`; return `{}` on missing/invalid assets. |
 
 ## `aidweather.utils`

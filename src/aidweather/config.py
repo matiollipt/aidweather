@@ -1,8 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """
-aidweather.config
-~~~~~~~~~~~~~~~~~
-
 Centralized configuration management for the `aidweather` package.
 
 Loads configuration settings from the bundled ``config.json`` file (located in
@@ -13,19 +10,6 @@ Access is provided through a singleton instance ``cfg`` of the ``_Config`` class
 The ``cfg`` object provides typed, dot-notation access to all configuration sections.
 If the JSON file is missing or invalid, all methods fall back to hardcoded defaults —
 the package never fails to import because of a missing config file.
-
-Ecosystem extension points
---------------------------
-Downstream packages (``aidviz``, ``aidfarm``, etc.) can store their own defaults
-under top-level keys in ``config.json``:
-
-    {
-        "aidviz":   {"default_theme": "dark", "dpi": 150},
-        "aidfarm":  {"gdd_base_temp_c": 10.0}
-    }
-
-and retrieve them with ``cfg.get("aidviz.dpi")``.  ``aidweather.config.cfg``
-is the single source of truth for the whole ecosystem.
 
 Example:
     >>> from aidweather.config import cfg
@@ -212,35 +196,6 @@ class _Config:
         }
         return {**defaults, **self.get("logging_config", default={})}
 
-    def visualization(self, key: str | None = None, default: Any = None) -> Any:
-        """Returns the visualization configuration section or a specific key within it.
-
-        The ``default_theme`` key is always ``None`` in ``aidweather``; theme
-        resolution is the responsibility of ``aidviz``.
-
-        Args:
-            key: A specific key to retrieve from the visualization config.
-            default: A default value to return if the key is not found.
-
-        Returns:
-            The requested visualization configuration value, or the full dict.
-        """
-        vis_config: dict[str, Any] = {"default_theme": None}
-        from_json = self.get("visualization", default={})
-        vis_config.update(from_json)
-
-        if key:
-            return vis_config.get(key, default)
-        return vis_config
-
-    def color_map(self) -> dict[str, str]:
-        """Returns the canonical per-parameter color map for the ecosystem.
-
-        Returns:
-            A dictionary mapping NASA POWER parameter codes to hex color strings.
-        """
-        return dict(self.get("color_map", default={}))
-
     def api_limits(self) -> dict[str, Any]:
         """Returns the NASA POWER API constraint configuration.
 
@@ -267,17 +222,4 @@ def get_config() -> _Config:
     return cfg
 
 
-def get_model_config() -> dict[str, Any]:
-    """Loads and returns the default model configuration from ``model_config.json``.
 
-    Returns:
-        A dictionary of model hyperparameter defaults, or an empty dict
-        if the file cannot be loaded.
-    """
-    try:
-        ref = resources.files("aidweather") / "assets" / "model_config.json"
-        with ref.open("r", encoding="utf-8") as f:
-            return dict(json.load(f))
-    except (FileNotFoundError, json.JSONDecodeError, AttributeError):
-        logging.warning("Could not load model_config.json. Returning empty dict.")
-        return {}

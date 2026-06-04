@@ -40,12 +40,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Reserved ecosystem extension points. In this beta they intentionally install no
-# additional packages; future aidviz/aidfarm releases can populate these extras.
-aidviz  = []
-aidfarm = []
-all     = ["aidweather[aidviz,aidfarm]"]
-
 test = [
     "pytest>=8.0.0",
     "requests-mock>=1.11.0",

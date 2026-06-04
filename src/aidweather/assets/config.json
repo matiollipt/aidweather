@@ -64,22 +64,5 @@
         "enabled": true,
         "filename": "aidweather.log",
         "level": "INFO"
-    },
-    "color_map": {
-        "T2M": "#D55E00",
-        "T2M_MAX": "#882255",
-        "T2M_MIN": "#56B4E9",
-        "T2M_RANGE": "#E69F00",
-        "T2MWET": "#CC79A7",
-        "T2MDEW": "#AA4499",
-        "TS": "#A0522D",
-        "RH2M": "#0072B2",
-        "PRECTOTCORR": "#009E73",
-        "ALLSKY_SFC_SW_DWN": "#D4AC0D",
-        "ALLSKY_SFC_PAR_TOT": "#117733",
-        "WS10M": "#808080",
-        "WS10M_MAX": "#000000",
-        "WD10M": "#999999",
-        "PS": "#332288"
     }
 }

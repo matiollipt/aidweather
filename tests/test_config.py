@@ -23,9 +23,7 @@ def sample_config_data():
         },
         "params": {"default": {"T2M": "Temperature at 2m"}, "metadata": {"LAT": "Latitude"}},
         "cache_config": {"enabled": False, "custom_path": "/tmp/custom_cache"},
-        "visualization": {"user_theme": "path/to/user.mplstyle"},
         "api_limits": {"max_days": 366},
-        "color_map": {"corn": "#FFD700"},
     }
 
 
@@ -130,29 +128,6 @@ def test_params_retrieval(sample_config_data, empty_config):
 
 # --- Tests for File I/O and Error Handling ---
 
-
-def test_visualization_config_theme_found(sample_config_data):
-    """
-    Tests that visualization config returns None for default_theme (no longer resolved
-    from core package) and correctly surfaces user-defined theme keys from JSON.
-    """
-    config = _Config(sample_config_data)
-    vis_config = config.visualization()
-
-    # default_theme is always None — the viz package resolves its own theme
-    assert vis_config["default_theme"] is None
-    # user-defined keys from the JSON section are still surfaced
-    assert vis_config["user_theme"] == "path/to/user.mplstyle"
-
-
-def test_visualization_config_theme_not_found(empty_config):
-    """
-    Tests that visualization() always returns default_theme=None and does not
-    raise or log a warning (theme resolution now lives in agrilyzer_viz).
-    """
-    config = _Config(empty_config)
-    vis_config = config.visualization()
-    assert vis_config["default_theme"] is None
 
 
 @patch("importlib.resources.files")

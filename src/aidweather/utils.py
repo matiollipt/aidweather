@@ -5,8 +5,7 @@ aidweather.utils
 
 Cross-cutting DataFrame utilities for the ``aidweather`` package.
 
-This module provides a single, focused primitive used by downstream packages
-such as ``aidfarm``: ``ensure_date_column``, which robustly finds, parses,
+This module provides a single, focused primitive: ``ensure_date_column``, which robustly finds, parses,
 and standardises a datetime column in a pandas DataFrame.
 
 Core Features:

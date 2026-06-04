@@ -86,10 +86,4 @@ log = cfg.logging_config()
 | `api_limits` | Max parameters per request type |
 | `cache_config` | `enabled` flag (path is resolved by Python, not set here) |
 | `logging_config` | File log settings (`filename`, `level`) |
-| `color_map` | Hex colors per parameter for downstream visualization packages |
 
----
-
-## Ecosystem extension
-
-Downstream packages (`aidviz`, `aidfarm`) can store their own defaults under top-level keys in `config.json` and retrieve them with `cfg.get("aidviz.dpi")`. The `cfg` singleton is the single source of truth for the whole `aid*` ecosystem.

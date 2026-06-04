@@ -13,11 +13,13 @@ For a high-level understanding of how `aidweather` transforms geographic points 
 
 ## Beta Status
 
-`aidweather` is in beta. The public API exposed from `aidweather.__init__` is intended to be usable for early scientific and agricultural workflows, but details around CLI output, cache internals, and future ecosystem integrations may still change before a stable 1.0 release. Please report confusing behavior, missing NASA POWER parameters, and documentation gaps in the project issue tracker.
+`aidweather` is in beta. The public API exposed from `aidweather.__init__` is intended to be usable for early scientific and agricultural workflows, but details around CLI output and cache internals may still change before a stable 1.0 release. Please report confusing behavior, missing NASA POWER parameters, and documentation gaps in the project issue tracker.
 
 NASA POWER remains the authoritative source for data availability, parameter definitions, and service limits. API keys can improve reliability and attribution, but they do not remove NASA POWER usage policies or rate limits.
 
 ## Installation
+
+IMPORTANT: Use the script below with caution. It is always good to review scripts downloaded from the internet before running them. In this case, you can review the script in the [aidweather GitHub repository](https://github.com/matiollipt/aidweather/blob/main/install.sh)
 
 ### 1. Installation Script (Linux / macOS)
 The installation script below automatically detects your environment, creates a virtual environment and installs `aidweather` (with optional developer tools).
@@ -58,11 +60,7 @@ curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.
 ```
 
 ### 3. Standard Pip Installation
-If you prefer standard package managers to manage your own virtual environment, install directly from PyPI:
-
-```bash
-pip install aidweather
-```
+SOON! Not available yet. You can follow the progress on [Issue #1](https://github.com/matiollipt/aidweather/issues/1).
 
 ### 4. Local Development Installation
 For custom development, clone the repository and run the setup script locally.
@@ -183,17 +181,6 @@ Set your NASA POWER API key via environment variable or a local `.env` file:
 NASA_POWER_API_KEY=your_key_here
 ```
 
-## Ecosystem
-
-`aidweather` is the foundation of the `aid*` toolkit:
-
-| Package | Purpose |
-|---|---|
-| **`aidweather`** ← you are here | Weather data retrieval, caching, validation |
-| `aidviz` *(coming soon)* | Custom agricultural weather plots |
-| `aidfarm` *(coming soon)* | EDA, feature engineering, ML for farm data |
-
-The future `aidviz` and `aidfarm` packages are roadmap items. Their package extras are reserved in the metadata, but they do not install additional dependencies in this beta.
 
 ## Citation & Attribution
 
