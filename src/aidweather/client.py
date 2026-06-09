@@ -5,7 +5,7 @@ from __future__ import annotations
 aidweather
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This module provides the `PowerClient`, a versatile, cache-based client for fetching
+This module provides the `PowerClient`, a cache-based client for fetching
 meteorological and solar energy data from NASA's POWER API.
 
 The `PowerClient` is designed as a lightweight API wrapper to fetch, validate, and parse
@@ -15,7 +15,7 @@ requests and a basic retry loop to manage network transient dropouts.
 Please note that this client is bound by NASA POWER API service limits. Standard IP requests
 without a registered key or using DEMO_KEY may be rate-limited, and requests are restricted
 to a maximum of 20 daily or 15 hourly parameters. Regional bounding-box requests only
-support single-parameter downloads and a maximum area of 4.5° × 4.5° at this time.
+support single-parameter downloads and a maximum area of 4.5° x 4.5° at this time.
 
 Key Features:
 - Wrapper for NASA's daily and hourly API endpoints.

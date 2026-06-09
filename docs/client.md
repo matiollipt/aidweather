@@ -1,9 +1,23 @@
 # PowerClient
 
-`PowerClient` is the main way to get weather data out of NASA POWER. Give it a location, a date range, and a list of parameters, and it returns a clean pandas DataFrame.
+`PowerClient` is a cache-based client for fetching meteorological and solar energy data from NASA's POWER API. Give it a location, a date range, and a list of parameters, and it returns a clean pandas DataFrame.
 
-It handles caching, retries, and parallel fetching for you. You don't need an API key for basic use, but registering one is recommended for regular work. API keys improve reliability and attribution; they do not remove NASA POWER service limits or usage policies.
+It handles caching, retries, and parallel fetching for you. The client does not override NASA POWER API service limits or usage policies.
 
+---
+
+## NASA POWER API Limits
+
+| API Resolution        | Max Parameters per Request | Spatial Constraint                                       | Temporal Constraint                |
+| --------------------- | -------------------------: | -------------------------------------------------------- | ---------------------------------- |
+| **Point (Daily)**     |                         20 | Single latitude/longitude point                          | 1981-01-01 to Near Real Time (NRT) |
+| **Point (Hourly)**    |                         15 | Single latitude/longitude point                          | 2001-01-01 to Near Real Time (NRT) |
+| **Regional (Daily)**  |                          1 | Bounding box ≤ 4.5° × 4.5°; returned as 0.5° × 0.5° grid | 1981-01-01 to Near Real Time (NRT) |
+| **Regional (Hourly)** |              Not supported | Not supported                                            | Not supported                      |
+
+`PowerClient` enforces these limits at the time of request submission. If you exceed a limit, the client will raise a `ValueError` before initiating the request.
+
+> **IMPORTANT**: The NASA POWER API is intended for scientific research and non-commercial use. It is not intended for commercial use or for operational production systems. Please read the [NASA POWER API User's Guide](https://power.larc.nasa.gov/docs/api/) for more information. **NASA does not endorse `aidweather`, its products, or its use in any way**
 ---
 
 ## Basic usage
