@@ -27,18 +27,49 @@ SAMPLE_POINT_RESPONSE = {
 }
 
 SAMPLE_REGIONAL_RESPONSE = {
+    "type": "FeatureCollection",
     "header": {
         "title": "NASA POWER Regional Daily Data",
         "api": "https://power.larc.nasa.gov/api/temporal/daily/regional",
     },
-    "properties": {
-        "parameter": {
-            "T2M": {
-                "20230101": 14.5,
-                "20230102": 15.2,
-            }
-        }
-    },
+    "features": [
+        {
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [10.0, 20.0, 50.5]},
+            "properties": {
+                "parameter": {
+                    "T2M": {
+                        "20230101": 14.5,
+                        "20230102": 15.2,
+                    }
+                }
+            },
+        },
+        {
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [10.5, 20.0, 52.0]},
+            "properties": {
+                "parameter": {
+                    "T2M": {
+                        "20230101": 13.8,
+                        "20230102": 14.6,
+                    }
+                }
+            },
+        },
+        {
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [10.0, 20.5, 48.0]},
+            "properties": {
+                "parameter": {
+                    "T2M": {
+                        "20230101": 15.1,
+                        "20230102": 15.9,
+                    }
+                }
+            },
+        },
+    ],
 }
 
 
@@ -84,15 +115,28 @@ def test_get_regional_data_success(mock_session):
     client = PowerClient()
     client.cache_cfg["enabled"] = False
 
-    points_list = [(20.0, 10.0)]
     df = client.get_regional_data(
-        lat_lon_list=points_list, start="2023-01-01", end="2023-01-02", params=["T2M"]
+        lat_min=20.0,
+        lat_max=21.0,
+        lon_min=10.0,
+        lon_max=11.0,
+        start="2023-01-01",
+        end="2023-01-02",
+        params=["T2M"],
     )
 
     assert not df.empty
-    # Regional endpoint parses the custom regional geo features list
+    # Regional endpoint parses the GeoJSON FeatureCollection
     assert "T2M" in df.columns
-    assert mock_session.last_request.qs["lonlat"] == ["10.0,20.0"]
+    assert "lat" in df.columns
+    assert "lon" in df.columns
+    # Should have 3 grid cells × 2 dates = 6 rows
+    assert len(df) == 6
+    # Verify bounding box params are sent correctly
+    assert mock_session.last_request.qs["latitude-min"] == ["20.0"]
+    assert mock_session.last_request.qs["latitude-max"] == ["21.0"]
+    assert mock_session.last_request.qs["longitude-min"] == ["10.0"]
+    assert mock_session.last_request.qs["longitude-max"] == ["11.0"]
 
 
 def test_get_regional_data_from_coordinates_success(mock_session):
@@ -104,14 +148,22 @@ def test_get_regional_data_from_coordinates_success(mock_session):
     client = PowerClient()
     client.cache_cfg["enabled"] = False
 
-    coords = [GeoCoordinate(lat=20.0, lon=10.0)]
+    coord_sw = GeoCoordinate(lat=20.0, lon=10.0)
+    coord_ne = GeoCoordinate(lat=21.0, lon=11.0)
     df = client.get_regional_data_from_coordinates(
-        coords=coords, start="2023-01-01", end="2023-01-02", params=["T2M"]
+        coord_sw=coord_sw,
+        coord_ne=coord_ne,
+        start="2023-01-01",
+        end="2023-01-02",
+        params=["T2M"],
     )
 
     assert not df.empty
     assert "T2M" in df.columns
-    assert mock_session.last_request.qs["lonlat"] == ["10.0,20.0"]
+    assert "lat" in df.columns
+    assert "lon" in df.columns
+    assert mock_session.last_request.qs["latitude-min"] == ["20.0"]
+    assert mock_session.last_request.qs["latitude-max"] == ["21.0"]
 
 
 def test_get_expanded_point_data_success(mock_session):

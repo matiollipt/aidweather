@@ -99,6 +99,25 @@ class _Config:
                 return default
         return value
 
+    def set(self, key_path: str, value: Any) -> None:
+        """Sets a nested value using dot notation, creating intermediate dictionaries if needed.
+
+        Example:
+            >>> cfg.set("cache_config.path", "/my/custom/path")
+
+        Args:
+            key_path: A dot-separated string representing the path to the
+                nested key (e.g., ``"section.subsection.key"``).
+            value: The value to assign to the key.
+        """
+        parts = key_path.split(".")
+        target = self._data
+        for part in parts[:-1]:
+            if part not in target or not isinstance(target[part], dict):
+                target[part] = {}
+            target = target[part]
+        target[parts[-1]] = value
+
     def get_url(self, temporal_api: str, endpoint_type: str = "point") -> str:
         """Returns the base URL for a specified temporal API and endpoint type.
 
@@ -154,7 +173,7 @@ class _Config:
         Path resolution priority (highest to lowest):
 
         1. ``AIDWEATHER_CACHE_DIR`` environment variable.
-        2. An **absolute** ``path`` key in ``config.json``.
+        2. A ``path`` key in ``config.json`` or configured in script.
         3. Platform-appropriate user cache directory
            (``~/.cache/aidweather`` on Linux, ``~/Library/Caches/aidweather``
            on macOS, ``%LOCALAPPDATA%/aidweather/Cache`` on Windows).
@@ -166,11 +185,11 @@ class _Config:
         env_override = os.environ.get("AIDWEATHER_CACHE_DIR")
         json_path = self.get("cache_config.path")
 
-        # Determine effective path — env var wins, then JSON (if absolute), then XDG
+        # Determine effective path — env var wins, then JSON (resolved if set), then XDG
         if env_override:
             effective_path = env_override
-        elif json_path and os.path.isabs(json_path):
-            effective_path = json_path
+        elif json_path:
+            effective_path = os.path.abspath(json_path)
         else:
             effective_path = xdg_default
 

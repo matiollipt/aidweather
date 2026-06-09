@@ -16,6 +16,7 @@ __pycache__/
 *.sqlite
 
 # Dev & IDE folders/files
+.claude/
 .vscode/
 .idea/
 .DS_Store
@@ -43,6 +44,3 @@ share/python-wheels/
 venv/
 env/
 ENV/
-
-# Scratch
-dev-notes/

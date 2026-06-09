@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.9"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -51,7 +51,6 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aidweather", extras = ["aidviz", "aidfarm"], marker = "extra == 'all'" },
     { name = "numpy", specifier = ">=1.24.0,<3" },
     { name = "pandas", specifier = ">=2.0.0,<4" },
     { name = "platformdirs", specifier = ">=3.0.0,<5" },
@@ -65,7 +64,7 @@ requires-dist = [
     { name = "typer", specifier = ">=0.12.0,<1" },
     { name = "urllib3", specifier = ">=2.0.0,<3" },
 ]
-provides-extras = ["aidviz", "aidfarm", "all", "test"]
+provides-extras = ["test"]
 
 [[package]]
 name = "annotated-doc"

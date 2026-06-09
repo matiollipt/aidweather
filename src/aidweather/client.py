@@ -14,8 +14,8 @@ requests and a basic retry loop to manage network transient dropouts.
 
 Please note that this client is bound by NASA POWER API service limits. Standard IP requests
 without a registered key or using DEMO_KEY may be rate-limited, and requests are restricted
-to a maximum of 20 daily or 15 hourly parameters. Regional area requests only support
-single-parameter downloads at this time.
+to a maximum of 20 daily or 15 hourly parameters. Regional bounding-box requests only
+support single-parameter downloads and a maximum area of 4.5° × 4.5° at this time.
 
 Key Features:
 - Wrapper for NASA's daily and hourly API endpoints.
@@ -42,6 +42,7 @@ import json
 import logging
 import os
 import sqlite3
+import threading
 import time
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -61,6 +62,38 @@ from rich.table import Table
 from urllib3.util.retry import Retry
 
 from aidweather import __version__
+
+
+class RateLimiter:
+    """Thread-safe sliding window rate limiter."""
+
+    def __init__(self, max_calls: int, period: float) -> None:
+        self.max_calls = max_calls
+        self.period = period
+        self.lock = threading.Lock()
+        self.calls: list[float] = []
+
+    def acquire(self) -> None:
+        """Blocks until a call is allowed under the rate limit."""
+        if self.max_calls <= 0 or self.period <= 0:
+            return
+
+        while True:
+            with self.lock:
+                now = time.time()
+                # Clean up calls older than the sliding window period
+                self.calls = [t for t in self.calls if now - t < self.period]
+
+                if len(self.calls) < self.max_calls:
+                    self.calls.append(now)
+                    return
+
+                # Sleep time calculation
+                sleep_time = self.calls[0] + self.period - now
+
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+
 
 # --- Module-level Helpers ---
 
@@ -439,6 +472,60 @@ def _ensure_all_params_in_df(df: pd.DataFrame, params: list[str]) -> pd.DataFram
     return df[params]
 
 
+def _regional_response_to_dataframe(data: dict[str, Any]) -> pd.DataFrame:
+    """Parses a GeoJSON FeatureCollection from the regional API into a DataFrame.
+
+    The NASA POWER regional endpoint returns a GeoJSON response where each
+    Feature represents a 0.5° grid cell with time-series data. This function
+    converts the nested structure into a flat, long-form DataFrame.
+
+    Args:
+        data: The parsed JSON data from the regional API response.
+
+    Returns:
+        A DataFrame with columns: ``date``, ``lat``, ``lon``, ``elevation``,
+        and one column per parameter. Indexed by ``date``.
+    """
+    features = data.get("features", [])
+    if not features:
+        return pd.DataFrame()
+
+    records: list[dict[str, Any]] = []
+    for feature in features:
+        coords = feature.get("geometry", {}).get("coordinates", [])
+        if len(coords) < 2:
+            continue
+        lon, lat = coords[0], coords[1]
+        elevation = coords[2] if len(coords) > 2 else None
+
+        params_data = feature.get("properties", {}).get("parameter", {})
+        # Build a dict of {date_str: {param: value, ...}} across all params
+        date_map: dict[str, dict[str, Any]] = {}
+        for param_name, time_series in params_data.items():
+            for date_str, value in time_series.items():
+                if date_str not in date_map:
+                    date_map[date_str] = {}
+                date_map[date_str][param_name] = value if value != -999 else pd.NA
+
+        for date_str, param_values in date_map.items():
+            record: dict[str, Any] = {
+                "date": pd.to_datetime(date_str, format="%Y%m%d"),
+                "lat": lat,
+                "lon": lon,
+            }
+            if elevation is not None:
+                record["elevation"] = elevation
+            record.update(param_values)
+            records.append(record)
+
+    if not records:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(records)
+    df = df.set_index("date").sort_index()
+    return df
+
+
 class PowerQuery(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     start: datetime | str | timedelta | pd.Timestamp
@@ -458,7 +545,27 @@ class ExpandedPointRequest(PointRequest):
     axis: Literal["lat", "lon"] = "lat"
     distance_km: float = 10.0
     num_points: int = 10
-    max_workers: int = 8
+    max_workers: int = 5
+
+
+class RegionalRequest(PowerQuery):
+    """Request model for the NASA POWER regional bounding-box endpoint.
+
+    The NASA POWER regional API accepts a geographic bounding box defined
+    by four coordinates and returns data on a 0.5° × 0.5° grid within
+    that box. The bounding box must not exceed 4.5° on either axis.
+
+    Attributes:
+        lat_min: Southern edge of the bounding box (latitude).
+        lat_max: Northern edge of the bounding box (latitude).
+        lon_min: Western edge of the bounding box (longitude).
+        lon_max: Eastern edge of the bounding box (longitude).
+    """
+
+    lat_min: float
+    lat_max: float
+    lon_min: float
+    lon_max: float
 
 
 # --- Main Client Class ---
@@ -518,6 +625,15 @@ class PowerClient:
         self.cache_cfg = cfg.cache_config()
         if self.cache_cfg.get("enabled", False):
             self._init_cache_db()
+
+        # API Limits & Concurrency Setup
+        self.api_limits = cfg.api_limits()
+        self.max_workers_limit = self.api_limits.get("max_workers", 5)
+
+        # Rate Limiter Setup
+        rate_limit_calls = self.api_limits.get("rate_limit_calls", 30)
+        rate_limit_period = self.api_limits.get("rate_limit_period_seconds", 60)
+        self.rate_limiter = RateLimiter(rate_limit_calls, rate_limit_period)
 
         # Authentication / API Key Setup — log state, never print to console
         _load_env_file()
@@ -719,27 +835,63 @@ class PowerClient:
         params: list[str],
         start: str,
         end: str,
-        lon_lat_list: list[tuple[float, float]],
+        lat_min: float,
+        lat_max: float,
+        lon_min: float,
+        lon_max: float,
     ) -> dict[str, Any]:
-        """Constructs the payload dictionary for a regional API request.
+        """Constructs the payload dictionary for a regional (bounding-box) API request.
+
+        The NASA POWER regional endpoint expects a geographic bounding box defined
+        by four edge coordinates. The box must not exceed 4.5° on either axis.
 
         Args:
-            params: List of POWER parameters to request.
-            start: The start date in a format parsable by `_format_date`.
-            end: The end date in a format parsable by `_format_date`.
-            lon_lat_list: A list of (longitude, latitude) tuples.
+            params: List of POWER parameters to request (max 1 for regional).
+            start: The start date in a format parsable by ``_format_date``.
+            end: The end date in a format parsable by ``_format_date``.
+            lat_min: Southern edge of the bounding box (latitude).
+            lat_max: Northern edge of the bounding box (latitude).
+            lon_min: Western edge of the bounding box (longitude).
+            lon_max: Eastern edge of the bounding box (longitude).
 
         Returns:
             The constructed payload dictionary.
+
+        Raises:
+            ValueError: If the bounding box exceeds 4.5° on either axis,
+                or if min >= max for latitude or longitude.
         """
         self._validate_request(params, is_regional=True)
-        payload = {
+
+        max_bbox = self.api_limits.get("max_bbox_degrees", 4.5)
+        lat_span = lat_max - lat_min
+        lon_span = lon_max - lon_min
+
+        if lat_min >= lat_max:
+            raise ValueError(
+                f"lat_min ({lat_min}) must be less than lat_max ({lat_max})."
+            )
+        if lon_min >= lon_max:
+            raise ValueError(
+                f"lon_min ({lon_min}) must be less than lon_max ({lon_max})."
+            )
+        if lat_span > max_bbox or lon_span > max_bbox:
+            raise ValueError(
+                f"Bounding box too large: {lat_span:.2f}° lat × {lon_span:.2f}° lon. "
+                f"NASA POWER regional API supports a maximum of "
+                f"{max_bbox}° × {max_bbox}°."
+            )
+
+        payload: dict[str, Any] = {
             "parameters": ",".join(params),
             "community": "AG",
             "format": "JSON",
             "start": self._format_date(start),
             "end": self._format_date(end),
-            "lonlat": ";".join(f"{lon},{lat}" for lon, lat in lon_lat_list),
+            "latitude-min": lat_min,
+            "latitude-max": lat_max,
+            "longitude-min": lon_min,
+            "longitude-max": lon_max,
         }
         if self.api_key:
             payload["api_key"] = self.api_key
@@ -773,6 +925,8 @@ class PowerClient:
             payload = base_payload.copy()
             payload["start"] = self._format_date(start)
             payload["end"] = self._format_date(end)
+            if hasattr(self, "rate_limiter") and self.rate_limiter:
+                self.rate_limiter.acquire()
             df, b = _fetch_and_parse(self.session, url, payload, self.temporal_api)
             self._metrics["api_calls"] += 1
             if not df.empty:
@@ -801,6 +955,8 @@ class PowerClient:
 
         if not use_cache:
             start_time = time.perf_counter()
+            if hasattr(self, "rate_limiter") and self.rate_limiter:
+                self.rate_limiter.acquire()
             df, b = _fetch_and_parse(
                 self.session, fetch_url, base_payload, self.temporal_api
             )
@@ -1055,7 +1211,7 @@ class PowerClient:
         start: str,
         end: str,
         params: list[str],
-        max_workers: int = 8,
+        max_workers: int = 5,
     ) -> tuple[
         pd.DataFrame,
         list[dict[str, Any] | tuple[float, float] | tuple[float, float, float]],
@@ -1075,11 +1231,13 @@ class PowerClient:
         """
         parsed_points = self._parse_points_input(points)
 
-        if max_workers > 5:
+        limit = getattr(self, "max_workers_limit", 5)
+        if max_workers > limit:
             logger.warning(
-                "NASA explicitly warns against more than 5 concurrent requests. "
-                "Proceed with caution."
+                f"Requested max_workers ({max_workers}) exceeds the configured limit of {limit}. "
+                f"Enforcing limit of {limit} to conform with NASA POWER API guidelines."
             )
+            max_workers = limit
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_point = self._submit_point_futures(
@@ -1198,49 +1356,142 @@ class PowerClient:
         console.print(Panel(self._build_stats_table(), subtitle="Efficiency"))
         console.print(Panel(self._build_conn_table(), subtitle="API Connection"))
 
+    def _fetch_regional_data(
+        self,
+        payload: dict[str, Any],
+    ) -> pd.DataFrame:
+        """Fetches data from the regional endpoint and parses the GeoJSON response.
+
+        Unlike the point-based ``_fetch_data`` which handles caching and date-range
+        merging, regional requests are always dispatched directly because the
+        response format (GeoJSON FeatureCollection) is fundamentally different.
+
+        Args:
+            payload: The regional request payload.
+
+        Returns:
+            A DataFrame with ``lat``, ``lon``, ``elevation``, and parameter columns,
+            indexed by date.
+        """
+        self._metrics["total_requests"] += 1
+        start_time = time.perf_counter()
+
+        if hasattr(self, "rate_limiter") and self.rate_limiter:
+            self.rate_limiter.acquire()
+
+        try:
+            resp = self.session.get(self.regional_base_url, params=payload)
+            resp.raise_for_status()
+            byte_count = len(resp.content)
+            data = _parse_json_response(resp)
+        except requests.exceptions.RequestException as e:
+            if getattr(e, "response", None) is not None and e.response.status_code == 429:
+                logger.error(
+                    "Rate limit exceeded (HTTP 429). Please slow down requests or use an API key."
+                )
+            logger.error(
+                f"Regional API request failed for payload {_safe_payload_repr(payload)}: {e}"
+            )
+            raise OSError(f"Regional API request failed: {e}") from e
+
+        self._metrics["api_calls"] += 1
+        self._metrics["total_downloaded_bytes"] += byte_count
+        self._metrics["fetch_duration"] += time.perf_counter() - start_time
+
+        if "error" in data:
+            logger.error(
+                f"Regional API Error for payload {_safe_payload_repr(payload)}: {data.get('error')}"
+            )
+            return pd.DataFrame()
+
+        return _regional_response_to_dataframe(data)
+
     def get_regional_data(
         self,
-        lat_lon_list: list[tuple[float, float]],
+        lat_min: float,
+        lat_max: float,
+        lon_min: float,
+        lon_max: float,
         start: str,
         end: str,
         params: list[str],
+        request: "RegionalRequest | None" = None,
     ) -> pd.DataFrame:
-        """Fetches data for a list of points using the regional API endpoint.
+        """Fetches data for a geographic bounding box using the regional API.
+
+        The NASA POWER regional endpoint returns data on a 0.5° × 0.5° grid
+        within the specified bounding box. The box must not exceed 4.5° on
+        either axis, and only one parameter may be requested per call.
 
         Args:
-            lat_lon_list: A list of (latitude, longitude) tuples.
-            start: The start date for the data query.
-            end: The end date for the data query.
-            params: A list of POWER API parameters to fetch.
+            lat_min: Southern edge of the bounding box (latitude).
+            lat_max: Northern edge of the bounding box (latitude).
+            lon_min: Western edge of the bounding box (longitude).
+            lon_max: Eastern edge of the bounding box (longitude).
+            start: The start date for the data query (e.g., ``"20230101"``).
+            end: The end date for the data query (e.g., ``"20230131"``).
+            params: A list containing **one** POWER API parameter.
+            request: Optional ``RegionalRequest`` object. If provided, its
+                fields override the positional arguments.
 
         Returns:
-            A DataFrame containing the regional data.
+            A DataFrame with ``lat``, ``lon``, ``elevation`` (when available),
+            and parameter columns, indexed by date.
+
+        Raises:
+            ValueError: If the bounding box is too large or more than one
+                parameter is requested.
         """
-        lon_lat_list = [(lon, lat) for (lat, lon) in lat_lon_list]
+        if request is not None:
+            lat_min = request.lat_min
+            lat_max = request.lat_max
+            lon_min = request.lon_min
+            lon_max = request.lon_max
+            start = request.start
+            end = request.end
+            params = request.params
+
         payload = self._build_regional_payload(
             params=params,
             start=start,
             end=end,
-            lon_lat_list=lon_lat_list,
+            lat_min=lat_min,
+            lat_max=lat_max,
+            lon_min=lon_min,
+            lon_max=lon_max,
         )
-        return self._fetch_data(payload, url=self.regional_base_url)
+        return self._fetch_regional_data(payload)
 
     def get_regional_data_from_coordinates(
-        self, coords: list[GeoCoordinate], start: str, end: str, params: list[str]
+        self,
+        coord_sw: GeoCoordinate,
+        coord_ne: GeoCoordinate,
+        start: str,
+        end: str,
+        params: list[str],
     ) -> pd.DataFrame:
-        """Convenience helper to call the regional endpoint with `GeoCoordinate` objects.
+        """Convenience helper to call the regional endpoint with two corner coordinates.
+
+        The two ``GeoCoordinate`` objects define the south-west and north-east
+        corners of the bounding box.
 
         Args:
-            coords: A list of `GeoCoordinate` objects.
+            coord_sw: South-west corner of the bounding box.
+            coord_ne: North-east corner of the bounding box.
             start: The start date for the data query.
             end: The end date for the data query.
-            params: A list of POWER API parameters to fetch.
+            params: A list containing **one** POWER API parameter.
 
         Returns:
-            A DataFrame containing the regional data.
+            A DataFrame containing the regional grid data.
         """
+        lat_sw, lon_sw = coord_sw.as_decimal()
+        lat_ne, lon_ne = coord_ne.as_decimal()
         return self.get_regional_data(
-            lat_lon_list=[(c.lat, c.lon) for c in coords],
+            lat_min=lat_sw,
+            lat_max=lat_ne,
+            lon_min=lon_sw,
+            lon_max=lon_ne,
             start=start,
             end=end,
             params=params,
@@ -1291,11 +1542,13 @@ class PowerClient:
             lons = np.linspace(lon_start, lon_end, num_points)
             points = [(round(lat, 4), round(p_lon, 4)) for p_lon in lons]
 
-        if max_workers > 5:
+        limit = getattr(self, "max_workers_limit", 5)
+        if max_workers > limit:
             logger.warning(
-                "NASA explicitly warns against more than 5 concurrent requests. "
-                "Proceed with caution."
+                f"Requested max_workers ({max_workers}) exceeds the configured limit of {limit}. "
+                f"Enforcing limit of {limit}."
             )
+            max_workers = limit
 
         logger.info(f"Generated {len(points)} points along the {axis} axis.")
 

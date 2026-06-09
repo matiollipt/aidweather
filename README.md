@@ -68,6 +68,20 @@ df = client.get_point_data(
 print(df.head())
 ```
 
+### Regional grid data
+
+Fetch data on a 0.5° × 0.5° grid within a bounding box (max 4.5° × 4.5°, one parameter per request):
+
+```python
+df = client.get_regional_data(
+    lat_min=-23.5, lat_max=-20.0,
+    lon_min=-47.0, lon_max=-44.0,
+    start="2023-01-01", end="2023-01-31",
+    params=["T2M"],
+)
+print(df.head())  # DataFrame with lat, lon, elevation, and T2M columns
+```
+
 ## CLI
 
 ```bash
@@ -92,6 +106,12 @@ aidweather fetch-multi --points-file sites.csv \
 aidweather fetch-transect --lat -23.55 --lon -46.63 \
     --start 2023-01-01 --end 2023-01-31 \
     --axis lat --distance-km 50 --num-points 10
+
+# Fetch regional grid data for a bounding box
+aidweather fetch-regional --lat-min -23.5 --lat-max -20.0 \
+    --lon-min -47.0 --lon-max -44.0 \
+    --start 2023-01-01 --end 2023-01-31 \
+    --params T2M --output regional.csv
 
 # List available NASA POWER parameters
 aidweather params list --group all

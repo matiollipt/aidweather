@@ -55,10 +55,16 @@
     },
     "api_limits": {
         "max_parameters_per_point_request": 20,
-        "recommended_community": "AG"
+        "max_parameters_per_regional_request": 1,
+        "max_bbox_degrees": 4.5,
+        "recommended_community": "AG",
+        "max_workers": 5,
+        "rate_limit_calls": 30,
+        "rate_limit_period_seconds": 60
     },
     "cache_config": {
-        "enabled": true
+        "enabled": true,
+        "path": null
     },
     "logging_config": {
         "enabled": true,

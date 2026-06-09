@@ -26,11 +26,19 @@ For bulk or catalog-scale workflows, NASA also hosts the full dataset on AWS S3 
 | Hourly | 15 parameters | — |
 | Monthly / Climatology | 20 parameters | 1 parameter |
 
+### Regional bounding box
+
+The regional endpoint accepts a geographic bounding box (south/north latitude, west/east longitude) and returns data on a 0.5° × 0.5° grid. The box must not exceed **4.5° on either axis**. Larger areas must be tiled into multiple requests.
+
 `PowerClient` validates these limits before sending any request and raises a `ValueError` if you exceed them.
 
 ### Concurrency
 
-NASA explicitly discourages submitting more than **5 concurrent requests** from the same IP. The CLI and `get_multi_point_data` both default to `max_workers=5` for this reason.
+NASA explicitly discourages submitting more than **5 concurrent requests** from the same IP. The CLI and `get_multi_point_data` both default to `max_workers=5` for this reason, and any higher requested values are automatically capped to enforce this limit.
+
+### Rate Limiting
+
+The package enforces a surgical client-side sliding window rate limiter (defaulting to 30 requests per minute) to conform with the limits established by NASA. This is configurable in `config.json` or programmatically via `cfg.set()`.
 
 ### Repeated grid-cell requests
 
@@ -59,6 +67,7 @@ All POWER temporal APIs default to **Local Solar Time (LST)**, not civil local t
 ## Recommended practices
 
 - Use **point requests** for normal single-farm or single-site workflows.
+- Use **regional requests** for grid-level analysis over an area up to 4.5° × 4.5°. For larger regions, tile the area into smaller bounding boxes.
 - Keep parameter lists within the documented cap for the temporal resolution you're using.
 - Set `max_workers` to 5 or below when fetching multiple sites in parallel.
 - If you're running the same large footprint repeatedly, **check the cache first** with `aidweather cache info`.

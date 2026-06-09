@@ -42,6 +42,7 @@ provides safe helpers for multi-point workflows.
 | `PowerQuery` | Base Pydantic request model for date range and parameters. | `start`, `end`, `params` |
 | `PointRequest` | Request model for one point. | `lat`, `lon`, `elevation`, `wind_elevation`, `wind_surface` |
 | `ExpandedPointRequest` | Request model for transects around one point. | `axis`, `distance_km`, `num_points`, `max_workers` |
+| `RegionalRequest` | Request model for a regional bounding-box query. | `lat_min`, `lat_max`, `lon_min`, `lon_max` |
 
 ### `PowerClient`
 
@@ -60,10 +61,10 @@ Primary methods:
 |---|---|---|
 | `get_point_data(request=None, **kwargs)` | Fetch data for one latitude/longitude pair. Accepts either a `PointRequest` or keyword arguments. | `pd.DataFrame` indexed by date/time |
 | `get_point_data_from_coordinate(coord, start, end, params, elevation=None, wind_elevation=None, wind_surface=None)` | Same as `get_point_data`, but starts from a `GeoCoordinate`. | `pd.DataFrame` |
-| `get_multi_point_data(points, start, end, params, max_workers=8)` | Fetch several points in parallel. Points may be dicts, tuples, or a DataFrame with `lat`/`lon`. | `(combined_df, failed_points)` |
+| `get_multi_point_data(points, start, end, params, max_workers=5)` | Fetch several points in parallel. Points may be dicts, tuples, or a DataFrame with `lat`/`lon`. | `(combined_df, failed_points)` |
 | `get_expanded_point_data(request=None, **kwargs)` | Generate a latitudinal or longitudinal transect and fetch each point. | Combined `pd.DataFrame` |
-| `get_regional_data(lat_lon_list, start, end, params)` | Fetch regional API data for latitude/longitude tuples. Daily regional requests support one parameter. | `pd.DataFrame` |
-| `get_regional_data_from_coordinates(coords, start, end, params)` | Regional helper accepting `GeoCoordinate` objects. | `pd.DataFrame` |
+| `get_regional_data(lat_min, lat_max, lon_min, lon_max, start, end, params, request=None)` | Fetch regional data on a 0.5° grid within a bounding box (≤ 4.5° × 4.5°). Daily only, one parameter. | `pd.DataFrame` with `lat`, `lon`, `elevation` columns |
+| `get_regional_data_from_coordinates(coord_sw, coord_ne, start, end, params)` | Regional helper accepting two corner `GeoCoordinate` objects (SW and NE). | `pd.DataFrame` |
 | `summarize(df)` | Print Rich tables describing coverage, cache/network metrics, and API connection state. | `None` |
 
 Lifecycle and representation:
@@ -78,6 +79,7 @@ Important behavior:
 - `temporal_api` must be `"daily"` or `"hourly"`.
 - Daily point requests allow up to 20 parameters; hourly point requests allow up
   to 15; daily regional requests allow one parameter.
+- Regional bounding boxes must not exceed 4.5° on either axis.
 - Missing NASA fill values (`-999`) become pandas missing values.
 - Empty API responses become DataFrames with the requested date range and
   requested columns filled with `NaN`.
@@ -103,7 +105,8 @@ the code or writing focused tests.
 | `_merge_and_deduplicate(df_list)` | Combine DataFrames, remove duplicate index rows, and sort by date/time. |
 | `_filter_df_by_date(df, start, end)` | Return an inclusive date/time slice. |
 | `_parse_json_response(resp)` | Decode JSON from a `requests.Response` and raise a clear error on invalid JSON. |
-| `_response_to_dataframe(data, temporal_api)` | Convert NASA POWER JSON into a numeric DataFrame with a `DatetimeIndex`. |
+| `_response_to_dataframe(data, temporal_api)` | Convert NASA POWER point JSON into a numeric DataFrame with a `DatetimeIndex`. |
+| `_regional_response_to_dataframe(data)` | Parse a GeoJSON FeatureCollection from the regional API into a flat DataFrame with `lat`, `lon`, `elevation` columns. |
 | `_ensure_all_params_in_df(df, params)` | Add missing requested parameter columns and order columns as requested. |
 
 `PowerClient` also has private methods for cache I/O, payload building, missing
@@ -117,9 +120,10 @@ range fetching, parallel future collection, and Rich table construction:
 | `_format_date(date_str)` | Convert a parseable date to NASA POWER `YYYYMMDD`. |
 | `_validate_request(params, is_regional=False)` | Enforce NASA POWER parameter/request constraints before making a request. |
 | `_build_point_payload(...)` | Build one point endpoint payload. |
-| `_build_regional_payload(...)` | Build one regional endpoint payload. |
+| `_build_regional_payload(...)` | Build one regional bounding-box endpoint payload with bbox validation. |
 | `_fetch_and_parse_ranges(ranges, base_payload, url)` | Fetch missing cache date ranges. |
 | `_fetch_data(base_payload, url=None)` | Orchestrate cache lookup, live fetching, merging, fallback, and filtering. |
+| `_fetch_regional_data(payload)` | Fetch and parse a regional GeoJSON response (no caching). |
 | `_parse_points_input(points)` | Normalize point inputs from lists or DataFrames. |
 | `_submit_point_futures(executor, parsed_points, start, end, params)` | Submit parallel point requests. |
 | `_collect_futures_results(future_to_point)` | Collect parallel results and failed point metadata. |
@@ -257,6 +261,7 @@ CLI commands:
 | `fetch(...)` | `aidweather fetch` | Fetch one point and optionally save/preview/summarize output. |
 | `fetch_multi(...)` | `aidweather fetch-multi` | Read a CSV of points and fetch all points. |
 | `fetch_transect(...)` | `aidweather fetch-transect` | Generate and fetch a spatial transect. |
+| `fetch_regional(...)` | `aidweather fetch-regional` | Fetch regional grid data for a bounding box (≤ 4.5° × 4.5°, one parameter). |
 | `params_list(group="default")` | `aidweather params list` | Print configured NASA POWER parameter codes. |
 | `params_describe(code)` | `aidweather params describe CODE` | Print one parameter's full description. |
 | `cache_info()` | `aidweather cache info` | Show cache location, size, and entry counts. |

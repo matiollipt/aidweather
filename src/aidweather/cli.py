@@ -443,6 +443,95 @@ def fetch_transect(  # noqa: PLR0913
     _save_output(df, output, fmt)
 
 
+@app.command(name="fetch-regional")
+def fetch_regional(  # noqa: PLR0913
+    lat_min: Annotated[
+        float, typer.Option("--lat-min", help="Southern edge of the bounding box (latitude).")
+    ],
+    lat_max: Annotated[
+        float, typer.Option("--lat-max", help="Northern edge of the bounding box (latitude).")
+    ],
+    lon_min: Annotated[
+        float, typer.Option("--lon-min", help="Western edge of the bounding box (longitude).")
+    ],
+    lon_max: Annotated[
+        float, typer.Option("--lon-max", help="Eastern edge of the bounding box (longitude).")
+    ],
+    start: Annotated[
+        str, typer.Option("--start", help="Start date (e.g., YYYY-MM-DD).")
+    ],
+    end: Annotated[str, typer.Option("--end", help="End date (e.g., YYYY-MM-DD).")],
+    params: Annotated[
+        str,
+        typer.Option(
+            "--params",
+            help="Single parameter for regional requests (e.g., T2M).",
+        ),
+    ] = "T2M",
+    output: Annotated[
+        Path | None, typer.Option("--output", help="Optional path to save data.")
+    ] = None,
+    fmt: Annotated[
+        str | None,
+        typer.Option(
+            "--format",
+            help=(
+                "Output format when --output has no recognized extension: "
+                "'csv', 'json', or 'parquet'."
+            ),
+        ),
+    ] = None,
+    no_preview: Annotated[
+        bool, typer.Option("--no-preview", help="Suppress data preview table.")
+    ] = False,
+    summarize: Annotated[
+        bool, typer.Option("--summarize", help="Print summary panel.")
+    ] = False,
+):
+    """Fetch weather data for a regional bounding box (0.5° grid).
+
+    The NASA POWER regional API returns data on a 0.5° × 0.5° grid within
+    the specified bounding box. The box must not exceed 4.5° on either axis,
+    and only one parameter can be requested per call.
+    """
+    param_list = [p.strip() for p in params.split(",") if p.strip()]
+    parsed_start = _parse_date(start)
+    parsed_end = _parse_date(end)
+
+    try:
+        client = PowerClient(temporal_api="daily")
+        df = client.get_regional_data(
+            lat_min=lat_min,
+            lat_max=lat_max,
+            lon_min=lon_min,
+            lon_max=lon_max,
+            start=parsed_start,
+            end=parsed_end,
+            params=param_list,
+        )
+    except ValueError as e:
+        console.print(f"[bold red]❌ Validation Error:[/bold red] {e}")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        console.print(f"[bold red]Error fetching regional data:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+    if df.empty:
+        console.print(
+            "[yellow]Warning: The API returned no data for this request.[/yellow]"
+        )
+        return
+
+    if not no_preview:
+        console.print("\n[bold blue]--- Data Preview (First 5 Rows) ---[/bold blue]")
+        console.print(df.head().to_markdown())
+
+    if summarize:
+        client.summarize(df)
+
+    _save_output(df, output, fmt)
+
+
 @params_app.command("list")
 def params_list(
     group: Annotated[

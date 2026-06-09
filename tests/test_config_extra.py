@@ -40,3 +40,34 @@ def test_config_load_real_file(tmp_path, monkeypatch):
     monkeypatch.setattr(importlib.resources, "files", fake_files)
     loaded = _load_config_dict()
     assert loaded["base_urls"]["daily"]["point"] == "http://example.com"
+
+
+def test_config_set_method():
+    # Test cfg.set on dynamic values
+    from aidweather.config import cfg
+    original_val = cfg.get("cache_config.path")
+    
+    cfg.set("cache_config.path", "relative_test_cache")
+    assert cfg.get("cache_config.path") == "relative_test_cache"
+    
+    # Test setting a deeply nested new key path
+    cfg.set("test_section.deep.key", 42)
+    assert cfg.get("test_section.deep.key") == 42
+    
+    # Clean up / reset
+    cfg.set("cache_config.path", original_val)
+
+
+def test_config_relative_path_resolution(monkeypatch):
+    from aidweather.config import cfg
+    # Clear env var if set
+    monkeypatch.delenv("AIDWEATHER_CACHE_DIR", raising=False)
+    
+    original_val = cfg.get("cache_config.path")
+    try:
+        cfg.set("cache_config.path", "my_relative/cache_dir")
+        cache_cfg = cfg.cache_config()
+        import os
+        assert cache_cfg["path"] == os.path.abspath("my_relative/cache_dir")
+    finally:
+        cfg.set("cache_config.path", original_val)

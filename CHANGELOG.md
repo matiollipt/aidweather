@@ -1,14 +1,18 @@
 # Changelog
 
-All notable changes to `aidweather` are documented here.
+All changes to `aidweather` are documented here.
 
 ---
 
-## [0.1.0] — 2026-05-30
+## [0.1.0] — 2026-06-10
 
-Initial beta release.
+### Breaking Changes
+
+- **Regional API refactored for NASA POWER compliance.** `get_regional_data()` now accepts a bounding box (`lat_min`, `lat_max`, `lon_min`, `lon_max`) instead of a list of lat/lon tuples. `get_regional_data_from_coordinates()` now accepts two corner `GeoCoordinate` objects (`coord_sw`, `coord_ne`) instead of a list. The old `lonlat` payload parameter was non-compliant with the NASA POWER API and has been removed.
 
 ### What's in this release
+
+I'm thrilled to present the initial **beta release** of `aidweather`, a Python package for fetching weather data from the NASA POWER API. The initial beta release includes:
 
 - `PowerClient` — NASA POWER API client with local SQLite cache, gzip compression, exponential-backoff retries, and parallel multi-point fetching.
 - `GeoCoordinate` — type-safe coordinate value object with DMS/DDM/DD parsing and formatting.
