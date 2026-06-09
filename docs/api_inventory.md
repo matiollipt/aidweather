@@ -46,14 +46,14 @@ provides safe helpers for multi-point workflows.
 
 ### `PowerClient`
 
-`PowerClient(temporal_api="daily", api_key=None, session=None)` creates a client
+`PowerClient(temporal_api="daily", session=None)` creates a client
 for the NASA POWER daily or hourly endpoint.
 
 Initialization:
 
 | Method | Purpose |
 |---|---|
-| `__init__(temporal_api="daily", api_key=None, session=None)` | Validate temporal resolution, configure URLs/session/cache, and load API key state. |
+| `__init__(temporal_api="daily", session=None)` | Validate temporal resolution, configure URLs/session/cache. |
 
 Primary methods:
 
@@ -94,9 +94,7 @@ the code or writing focused tests.
 | Name | Purpose |
 |---|---|
 | `_session_with_retries(total=5, backoff_factor=0.5, status_forcelist=(429, 500, 502, 503, 504))` | Create a `requests.Session` with retry/backoff behavior and the package user agent. |
-| `_load_env_file(filename=".env")` | Load simple `KEY=value` pairs from a local `.env` file without overriding existing environment variables. |
-| `_make_cache_key(payload, temporal_api="daily")` | Build a deterministic SHA-256 cache key, excluding dates and API key. |
-| `_safe_payload_repr(payload)` | Return a payload string with API secrets redacted. |
+| `_make_cache_key(payload, temporal_api="daily")` | Build a deterministic SHA-256 cache key, excluding dates. |
 | `_format_bytes(size)` | Format bytes as `B`, `KiB`, `MiB`, or larger units. |
 | `_to_naive(ts)` | Strip timezone information from a pandas `Timestamp`. |
 | `_get_date_ranges_to_fetch(requested_start, requested_end, cached_df, temporal_api)` | Identify missing leading/trailing date ranges not present in cached data. |

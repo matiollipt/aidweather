@@ -36,7 +36,6 @@ AidWeather is designed to respect NASA's service limits. Users should be aware o
 - **Personal API Key**: Recommended for production use to ensure higher throughput and reliability.
 
 ### Security and Caching
-- **API Keys**: Store your `NASA_POWER_API_KEY` in environment variables. AidWeather automatically redacts these keys in logs.
 - **Local Caching**: AidWeather caches data locally in a SQLite database (`aidweather_cache.db`). Note that while data is compressed, it is **not encrypted at rest**. Users operating on shared systems should secure their cache directories.
 
 ## 4. Legal Compliance Summary

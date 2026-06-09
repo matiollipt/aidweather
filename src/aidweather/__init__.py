@@ -3,7 +3,7 @@
 aidweather
 ~~~~~~~~~~
 
-Weather data retrieval and validation for agricultural applications.
+Weather data retrieval and validation for agricultural and environmental applications.
 
 Provides a beta-ready client for NASA's POWER API, with a local SQLite cache,
 retry logic, parallel fetching, geospatial coordinate utilities, and a CLI.

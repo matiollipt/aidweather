@@ -1,23 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-import os
 from unittest.mock import patch
 
 import pytest
-from aidweather.client import PowerClient, _safe_payload_repr
-
-
-def test_safe_payload_repr():
-    payload = {"parameters": "T2M", "api_key": "1234567890abcdef"}
-    repr_str = _safe_payload_repr(payload)
-    assert "1234567890" not in repr_str
-    assert "***abcdef" in repr_str
-
-    payload_demo = {"parameters": "T2M", "api_key": "DEMO_KEY"}
-    assert "DEMO_KEY" in _safe_payload_repr(payload_demo)
-
-    payload_short = {"parameters": "T2M", "api_key": "123"}
-    assert "***" in _safe_payload_repr(payload_short)
-    assert "123" not in _safe_payload_repr(payload_short)
+from aidweather.client import PowerClient
 
 
 def test_hourly_point_limit():
@@ -82,30 +67,26 @@ def test_wind_elevation_validation():
     assert payload["wind-elevation"] == 10
 
 
-@patch.dict(os.environ, {"NASA_POWER_API_KEY": "SECRET_KEY"})
-def test_api_key_loaded_from_env():
-    client = PowerClient(temporal_api="daily")
-    assert client.api_key == "SECRET_KEY"
-
-    payload = client._build_point_payload(
-        params=["T2M"], start="20230101", end="20230101", lon=0, lat=0
-    )
-    assert payload["api_key"] == "SECRET_KEY"
-
-
 def test_max_workers_enforcement():
     # Enforces max workers clamping
     from aidweather.config import cfg
+
     original_workers = cfg.get("api_limits.max_workers")
     try:
         cfg.set("api_limits.max_workers", 3)
         client = PowerClient(temporal_api="daily")
         assert client.max_workers_limit == 3
-        
+
         # Test get_multi_point_data clamping
         with patch.object(client, "_parse_points_input", return_value=[]):
             with patch("aidweather.client.ThreadPoolExecutor") as mock_executor:
-                client.get_multi_point_data(points=[], start="20230101", end="20230101", params=["T2M"], max_workers=10)
+                client.get_multi_point_data(
+                    points=[],
+                    start="20230101",
+                    end="20230101",
+                    params=["T2M"],
+                    max_workers=10,
+                )
                 mock_executor.assert_called_once_with(max_workers=3)
     finally:
         cfg.set("api_limits.max_workers", original_workers)
@@ -113,6 +94,7 @@ def test_max_workers_enforcement():
 
 def test_rate_limiting_throttling():
     import time
+
     client = PowerClient(temporal_api="daily")
     # Set the rate limit to 2 calls per 1 second
     client.rate_limiter.max_calls = 2
@@ -125,7 +107,7 @@ def test_rate_limiting_throttling():
     # Third call should block until 1 second has elapsed since the first call
     client.rate_limiter.acquire()
     t1 = time.time()
-    
+
     assert t1 - t0 >= 0.8  # Should be close to 1.0 second delay
 
 
@@ -203,4 +185,3 @@ def test_regional_bbox_valid():
     assert payload["longitude-max"] == -44.0
     assert payload["parameters"] == "T2M"
     assert "lonlat" not in payload  # Old field must not be present
-

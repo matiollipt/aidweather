@@ -165,14 +165,6 @@ aidweather cache info
 
 For a full breakdown of the configuration files, see [Assets](docs/ASSETS.md) and [Config](docs/config.md).
 
-Set your NASA POWER API key via environment variable or a local `.env` file:
-
-```bash
-# .env
-NASA_POWER_API_KEY=your_key_here
-```
-
-
 ## Citation & Attribution
 
 When publishing analyses based on data retrieved with `aidweather`, cite NASA POWER as the data provider and mention the package version used in your workflow.

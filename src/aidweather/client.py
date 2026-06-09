@@ -144,44 +144,12 @@ def _session_with_retries(
 logger = logging.getLogger(__name__)
 
 
-def _load_env_file(filename: str = ".env") -> None:
-    """Parses a .env file from the current directory and sets environment variables.
-
-    This function looks for a file named `.env` in the current working directory.
-    If found, it reads each line, splits it into key-value pairs, and adds them
-    to `os.environ`. Lines starting with '#' or empty lines are ignored.
-
-    Args:
-        filename: The name of the environment file to load.
-    """
-    env_path = os.path.join(os.getcwd(), filename)
-    if not os.path.exists(env_path):
-        return
-
-    try:
-        with open(env_path, encoding="utf-8") as f:
-            for raw_line in f:
-                clean_line = raw_line.strip()
-                if not clean_line or clean_line.startswith("#"):
-                    continue
-                if "=" in clean_line:
-                    key, value = clean_line.split("=", 1)
-                    key = key.strip()
-                    value = value.strip().strip("'").strip('"')
-                    if key and value:
-                        if key not in os.environ:
-                            os.environ[key] = value
-                            logger.debug(f"Loaded {key} from {filename}")
-    except Exception as e:
-        logger.warning(f"Failed to load {filename} file: {e}")
-
-
 def _make_cache_key(payload: dict[str, Any], temporal_api: str = "daily") -> str:
     """Creates a deterministic SHA-256 hash from a request payload dictionary.
 
-    This hash is used as a key for caching. The 'start', 'end', and 'api_key' keys are
+    This hash is used as a key for caching. The 'start' and 'end' keys are
     removed from the payload before hashing to ensure that requests for the same
-    location and parameters but different time ranges/keys can share a cache entry.
+    location and parameters but different time ranges can share a cache entry.
 
     Args:
         payload: The request payload dictionary.
@@ -193,24 +161,9 @@ def _make_cache_key(payload: dict[str, Any], temporal_api: str = "daily") -> str
     key_payload = payload.copy()
     key_payload.pop("start", None)
     key_payload.pop("end", None)
-    key_payload.pop("api_key", None)
     key_payload["_temporal_api"] = temporal_api
     encoded = json.dumps(key_payload, sort_keys=True).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
-
-
-def _safe_payload_repr(payload: dict[str, Any]) -> str:
-    """Returns a string representation of the payload with secrets redacted."""
-    safe_payload = payload.copy()
-    if "api_key" in safe_payload:
-        key = safe_payload["api_key"]
-        if key == "DEMO_KEY":
-            pass
-        elif isinstance(key, str) and len(key) > 6:
-            safe_payload["api_key"] = f"***{key[-6:]}"
-        else:
-            safe_payload["api_key"] = "***"
-    return str(safe_payload)
 
 
 def _format_bytes(size: float) -> str:
@@ -311,21 +264,15 @@ def _fetch_and_parse(
         data = _parse_json_response(resp)
 
         if "error" in data:
-            logger.error(
-                f"API Error for payload {_safe_payload_repr(payload)}: {data.get('error')}"
-            )
+            logger.error(f"API Error for payload {payload}: {data.get('error')}")
             return pd.DataFrame(), 0
 
         return _response_to_dataframe(data, temporal_api), byte_count
 
     except requests.exceptions.RequestException as e:
         if getattr(e, "response", None) is not None and e.response.status_code == 429:
-            logger.error(
-                "Rate limit exceeded (HTTP 429). Please slow down requests or use an API key."
-            )
-        logger.error(
-            f"API request failed for payload {_safe_payload_repr(payload)}: {e}"
-        )
+            logger.error("Rate limit exceeded (HTTP 429). Please slow down requests.")
+        logger.error(f"API request failed for payload {payload}: {e}")
         raise OSError(f"API request failed: {e}") from e
 
 
@@ -585,7 +532,6 @@ class PowerClient:
     def __init__(
         self,
         temporal_api: Literal["daily", "hourly"] = "daily",
-        api_key: str | None = None,
         session: requests.Session | None = None,
     ):
         """Initializes the PowerClient and its caching system.
@@ -593,9 +539,6 @@ class PowerClient:
         Args:
             temporal_api: The temporal API endpoint to use, either "daily" or
                 "hourly".
-            api_key: An optional NASA POWER API key. If not provided, the client
-                will attempt to load it from a `.env` file in the current working
-                directory or from the `NASA_POWER_API_KEY` environment variable.
             session: An optional `requests.Session` object to use for API calls.
                 If not provided, a new session with retry logic will be created.
 
@@ -634,17 +577,6 @@ class PowerClient:
         rate_limit_calls = self.api_limits.get("rate_limit_calls", 30)
         rate_limit_period = self.api_limits.get("rate_limit_period_seconds", 60)
         self.rate_limiter = RateLimiter(rate_limit_calls, rate_limit_period)
-
-        # Authentication / API Key Setup — log state, never print to console
-        _load_env_file()
-        self.api_key = api_key or os.environ.get("NASA_POWER_API_KEY")
-        if self.api_key == "DEMO_KEY":
-            logger.info("Using NASA POWER DEMO_KEY. Rate limits will be very strict.")
-        elif self.api_key:
-            masked_key = f"***{self.api_key[-4:]}" if len(self.api_key) > 4 else "***"
-            logger.info("NASA POWER API key configured (%s).", masked_key)
-        else:
-            logger.info("No NASA POWER API key provided. Using IP-based limits.")
 
     def _init_cache_db(self) -> None:
         """Initializes the SQLite database connection and creates the cache table.
@@ -816,8 +748,6 @@ class PowerClient:
             "longitude": lon,
             "latitude": lat,
         }
-        if self.api_key:
-            payload["api_key"] = self.api_key
         if elevation is not None:
             payload["site-elevation"] = elevation
         if wind_elevation is not None:
@@ -893,8 +823,6 @@ class PowerClient:
             "longitude-min": lon_min,
             "longitude-max": lon_max,
         }
-        if self.api_key:
-            payload["api_key"] = self.api_key
         return payload
 
     def _fetch_and_parse_ranges(
@@ -1330,16 +1258,6 @@ class PowerClient:
         table.add_column("Property", style="dim")
         table.add_column("Value")
 
-        if self.api_key == "DEMO_KEY":
-            key_status, key_type = "DEMO_KEY (Strict limits)", "DEMO_KEY"
-        elif self.api_key:
-            masked = f"***{self.api_key[-4:]}" if len(self.api_key) > 4 else "***"
-            key_status, key_type = f"Provided ({masked})", "Personal (Redacted)"
-        else:
-            key_status, key_type = "Not provided (Using IP-based limits)", "None"
-
-        table.add_row("API Key Status", key_status)
-        table.add_row("Auth Mode", key_type)
         table.add_row("User Agent", USER_AGENT.split(" (", maxsplit=1)[0])
         table.add_row("Base URL", self.base_url.split("/temporal")[0])
         return table
@@ -1385,7 +1303,10 @@ class PowerClient:
             byte_count = len(resp.content)
             data = _parse_json_response(resp)
         except requests.exceptions.RequestException as e:
-            if getattr(e, "response", None) is not None and e.response.status_code == 429:
+            if (
+                getattr(e, "response", None) is not None
+                and e.response.status_code == 429
+            ):
                 logger.error(
                     "Rate limit exceeded (HTTP 429). Please slow down requests or use an API key."
                 )

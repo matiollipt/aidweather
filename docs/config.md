@@ -32,26 +32,10 @@ Priority order when resolving the path:
 2. A `path` key in `config.json` or programmatically set via `cfg.set("cache_config.path", "/custom/path")`
 3. Platform default (see table above)
 
-> [!NOTE]
-> Only `NASA_POWER_API_KEY` benefits from `.env` auto-loading. `AIDWEATHER_CACHE_DIR` must be set in the actual shell environment before launching the Python process, or programmatically via `cfg.set()`.
+
 
 ---
 
-## API key
-
-Set your NASA POWER API key as an environment variable:
-
-```bash
-NASA_POWER_API_KEY=your_key_here
-```
-
-Or in a `.env` file in the project root.
-
-```
-
-Without a key, the client uses IP-based limits (30,000 requests/day shared across all users on your IP).
-
----
 
 ## Accessing config values in code
 
