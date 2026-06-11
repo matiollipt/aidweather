@@ -1,10 +1,46 @@
 # SPDX-License-Identifier: Apache-2.0
+import re
 from unittest.mock import patch
 import pandas as pd
 from aidweather.cli import app
 from typer.testing import CliRunner
 
-runner = CliRunner()
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from text."""
+    ansi_escape = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
+    return ansi_escape.sub('', text)
+
+
+class CleanResult:
+    """Wrapper around click/typer test Result to strip ANSI sequences from output."""
+    def __init__(self, result):
+        self._result = result
+        self.exit_code = result.exit_code
+        self.exception = result.exception
+        self.exc_info = result.exc_info
+
+    @property
+    def stdout(self) -> str:
+        return strip_ansi(self._result.stdout)
+
+    @property
+    def stderr(self) -> str:
+        return strip_ansi(self._result.stderr)
+
+    @property
+    def output(self) -> str:
+        return strip_ansi(self._result.output)
+
+
+class CleanCliRunner(CliRunner):
+    """Subclass of CliRunner that returns CleanResult to avoid ANSI issues in tests."""
+    def invoke(self, *args, **kwargs):
+        res = super().invoke(*args, **kwargs)
+        return CleanResult(res)
+
+
+runner = CleanCliRunner()
 
 
 def test_help():
