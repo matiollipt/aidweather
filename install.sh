@@ -22,7 +22,7 @@ USE_VENV=true
 VENV_PATH=".venv"
 CLEAN_VENV=false
 AUTO_YES=false
-USE_PIPX=false
+USE_UV_TOOL=false
 
 # Help
 show_help() {
@@ -30,7 +30,7 @@ show_help() {
     printf 'Usage:\n'
     printf '  ./install.sh [options]\n\n'
     printf 'Options:\n'
-    printf '  %-24s %s\n' "--pipx"         "Install globally in isolated env using pipx"
+    printf '  %-24s %s\n' "--uv-tool"       "Install globally in isolated env using uv tool"
     printf '  %-24s %s\n' "--dev"           "Install developer tools (pytest, ruff, mypy, build)"
     printf '  %-24s %s\n' "--no-venv"       "Skip venv creation (use active/global Python)"
     printf '  %-24s %s\n' "--venv-path DIR" "Custom venv path (default: .venv)"
@@ -39,7 +39,7 @@ show_help() {
     printf '  %-24s %s\n' "-h, --help"      "Show this help and exit"
     printf '\nExamples:\n'
     printf '  ./install.sh                         # Default install in .venv\n'
-    printf '  ./install.sh --pipx                  # Install globally via pipx\n'
+    printf '  ./install.sh --uv-tool               # Install globally via uv tool\n'
     printf '  ./install.sh --dev --clean           # Fresh install with dev tools\n'
     printf '  curl -fsSL .../install.sh | bash -s -- --dev -y\n\n'
     exit 0
@@ -48,7 +48,7 @@ show_help() {
 # Argument parsing
 while [ $# -gt 0 ]; do
     case "$1" in
-        --pipx)         USE_PIPX=true;  shift ;;
+        --uv-tool)      USE_UV_TOOL=true; shift ;;
         --dev|-d)       DEV_MODE=true;  shift ;;
         --no-venv)      USE_VENV=false; shift ;;
         --venv-path)    VENV_PATH="$2"; shift 2 ;;
@@ -155,9 +155,9 @@ pip_install() {
     fi
 }
 
-if [ "$USE_PIPX" = true ]; then
-    if ! command -v pipx > /dev/null 2>&1; then
-        die "pipx is not installed. Please install pipx first (e.g., 'brew install pipx' or 'sudo apt install pipx') or run without --pipx."
+if [ "$USE_UV_TOOL" = true ]; then
+    if ! command -v uv > /dev/null 2>&1; then
+        die "uv is not installed. Please install uv first (see https://docs.astral.sh/uv/getting-started/installation/) or run without --uv-tool."
     fi
     USE_VENV=false
 fi
@@ -165,8 +165,8 @@ fi
 if [ "$USE_VENV" = true ]; then
     setup_venv
 else
-    if [ "$USE_PIPX" = true ]; then
-        info "Skipping standard venv; installing via pipx"
+    if [ "$USE_UV_TOOL" = true ]; then
+        info "Skipping standard venv; installing via uv tool"
     else
         info "Skipping venv; using active/global Python"
     fi
@@ -174,8 +174,8 @@ else
 fi
 
 venv_label=$( [ "$USE_VENV" = true ] && echo "$VENV_PATH" || echo "global/active Python" )
-if [ "$USE_PIPX" = true ]; then
-    venv_label="pipx (isolated user application)"
+if [ "$USE_UV_TOOL" = true ]; then
+    venv_label="uv tool (isolated user application)"
 fi
 info "Installing aidweather"
 info "Environment: $venv_label"
@@ -198,13 +198,13 @@ if [ "$AUTO_YES" = false ]; then
 fi
 
 # Install core package
-if [ "$USE_PIPX" = true ]; then
-    info "Installing package with pipx"
-    if pipx list | grep -q "package aidweather"; then
-        info "Existing pipx install found; reinstalling"
-        pipx install --force .
+if [ "$USE_UV_TOOL" = true ]; then
+    info "Installing package with uv tool"
+    if uv tool list 2>/dev/null | grep -q "aidweather"; then
+        info "Existing uv tool install found; reinstalling"
+        uv tool install --reinstall .
     else
-        pipx install .
+        uv tool install .
     fi
 else
     info "Installing package"
@@ -213,16 +213,17 @@ fi
 
 # Developer tools
 if [ "$DEV_MODE" = true ]; then
-    if [ "$USE_PIPX" = true ]; then
-        info "Installing developer tools into pipx environment"
-        pipx inject aidweather \
-            "pytest>=8.0.0" \
-            "pytest-cov>=4.1.0" \
-            "requests-mock>=1.11.0" \
-            "ruff>=0.3.0" \
-            "mypy>=1.9.0" \
-            "build>=1.1.0" \
-            "twine>=5.0.0"
+    if [ "$USE_UV_TOOL" = true ]; then
+        info "Installing developer tools into uv tool environment"
+        uv tool install \
+            --with "pytest>=8.0.0" \
+            --with "pytest-cov>=4.1.0" \
+            --with "requests-mock>=1.11.0" \
+            --with "ruff>=0.3.0" \
+            --with "mypy>=1.9.0" \
+            --with "build>=1.1.0" \
+            --with "twine>=5.0.0" \
+            --reinstall .
     else
         info "Installing developer tools"
         pip_install \
@@ -238,14 +239,14 @@ fi
 
 # Smoke test
 info "Checking installation"
-if [ "$USE_PIPX" = true ]; then
-    # Try the standard pipx binary directory first to avoid other env pollution
-    PIPX_LOCAL_BIN="${PIPX_BIN_DIR:-$HOME/.local/bin}/aidweather"
-    if [ -f "$PIPX_LOCAL_BIN" ] && "$PIPX_LOCAL_BIN" --help > /dev/null 2>&1; then
+if [ "$USE_UV_TOOL" = true ]; then
+    # Try the standard uv tool binary directory first to avoid other env pollution
+    UV_TOOL_LOCAL_BIN="${UV_TOOL_BIN_DIR:-$HOME/.local/bin}/aidweather"
+    if [ -f "$UV_TOOL_LOCAL_BIN" ] && "$UV_TOOL_LOCAL_BIN" --help > /dev/null 2>&1; then
         # Warn if it's not in PATH or not the active one
-        if ! command -v aidweather > /dev/null 2>&1 || [ "$(command -v aidweather)" != "$PIPX_LOCAL_BIN" ]; then
-            warn "Note: $PIPX_LOCAL_BIN is not the active 'aidweather' in your PATH (found $(command -v aidweather || echo 'none') instead)."
-            warn "You may need to run 'pipx ensurepath' and restart your terminal."
+        if ! command -v aidweather > /dev/null 2>&1 || [ "$(command -v aidweather)" != "$UV_TOOL_LOCAL_BIN" ]; then
+            warn "Note: $UV_TOOL_LOCAL_BIN is not the active 'aidweather' in your PATH (found $(command -v aidweather || echo 'none') instead)."
+            warn "You may need to run 'uv tool update-shell' and restart your terminal."
         fi
     elif command -v aidweather > /dev/null 2>&1 && aidweather --help > /dev/null 2>&1; then
         :
@@ -267,10 +268,10 @@ fi
 # Done
 printf 'aidweather installed successfully.\n'
 
-if [ "$USE_PIPX" = true ]; then
+if [ "$USE_UV_TOOL" = true ]; then
     printf 'Run: aidweather --help\n'
-    printf '  If the command is not found, ensure pipx binary path is in your PATH:\n'
-    printf '    pipx ensurepath\n\n'
+    printf '  If the command is not found, ensure uv tool binary path is in your PATH:\n'
+    printf '    uv tool update-shell\n\n'
 elif [ "$USE_VENV" = true ]; then
     printf 'Activate the environment with:\n'
     printf '  source %s/bin/activate\n' "$VENV_PATH"

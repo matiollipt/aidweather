@@ -26,7 +26,7 @@ Optional flags passed via `-s --`:
 |---|---|
 | `--dev` | Also install developer tools |
 | `--dev -y` | Developer tools, skip prompts |
-| `--pipx` | Install globally in an isolated environment via pipx |
+| `--uv-tool` | Install globally in an isolated environment via uv tool |
 
 Example:
 
