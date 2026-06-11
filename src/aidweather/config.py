@@ -1,15 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """
-Centralized configuration management for the `aidweather` package.
+Centralized configuration management for `aidweather`.
 
-Loads configuration settings from the bundled ``config.json`` file (located in
-``aidweather/assets/``) via ``importlib.resources``, ensuring the file is found
-regardless of how the package is installed (editable, wheel, zip-imported, etc.).
-
-Access is provided through a singleton instance ``cfg`` of the ``_Config`` class.
-The ``cfg`` object provides typed, dot-notation access to all configuration sections.
-If the JSON file is missing or invalid, all methods fall back to hardcoded defaults —
-the package never fails to import because of a missing config file.
+Provides a singleton ``cfg`` instance offering dot-notation access
+to settings loaded from ``config.json`` via ``importlib.resources``. If
+the config file is missing or malformed, it falls back to hardcoded
+defaults to ensure the package remains importable.
 
 Example:
     >>> from aidweather.config import cfg
@@ -42,15 +38,13 @@ _DEFAULT_URLS = {
 
 
 def _load_config_dict() -> dict:
-    """Loads the configuration dictionary from the bundled ``config.json``.
-
-    Uses ``importlib.resources`` to locate the asset file robustly, regardless
-    of how the package is installed (wheel, editable install, zip import, etc.).
+    """Load configuration from the bundled config.json file.
 
     Returns:
-        A dictionary containing the configuration settings, or an empty dict
-        if the file cannot be found or parsed.
+        dict: The parsed configuration dictionary, or an empty
+            dictionary if the file is missing or invalid.
     """
+
     try:
         ref = resources.files("aidweather") / "assets" / "config.json"
         with ref.open("r", encoding="utf-8") as f:
@@ -61,36 +55,28 @@ def _load_config_dict() -> dict:
 
 
 class _Config:
-    """A thin, typed wrapper over the bundled JSON config.
+    """Wrap the bundled JSON configuration as a typed object.
 
-    Not intended to be instantiated directly by users. Use the module-level
-    singleton ``cfg`` for all access.
+    Not intended to be instantiated directly; use the module-level
+    singleton ``cfg`` for access.
 
     Attributes:
         _data: The dictionary holding the loaded configuration.
     """
 
     def __init__(self, data: Mapping) -> None:
-        """Initializes the _Config object.
-
-        Args:
-            data: A dictionary-like object containing the configuration data.
-        """
+        """Initialize the config object with the provided data."""
         self._data = dict(data or {})
 
     def get(self, key_path: str, default: Any = None) -> Any:
-        """Accesses a nested value using dot notation.
-
-        Example:
-            >>> cfg.get("base_urls.daily.point")
+        """Get a nested value using dot-notation.
 
         Args:
-            key_path: A dot-separated string representing the path to the
-                nested key (e.g., ``"section.subsection.key"``).
-            default: The value to return if the key is not found.
+            key_path: A dot-separated string (e.g., "section.key").
+            default: Value to return if the path is not found.
 
         Returns:
-            The configuration value if found, otherwise ``default``.
+            The value at key_path or default if missing.
         """
         value = self._data
         for key in key_path.split("."):
@@ -100,14 +86,10 @@ class _Config:
         return value
 
     def set(self, key_path: str, value: Any) -> None:
-        """Sets a nested value using dot notation, creating intermediate dictionaries if needed.
-
-        Example:
-            >>> cfg.set("cache_config.path", "/my/custom/path")
+        """Set a nested value using dot-notation.
 
         Args:
-            key_path: A dot-separated string representing the path to the
-                nested key (e.g., ``"section.subsection.key"``).
+            key_path: A dot-separated string (e.g., "section.key").
             value: The value to assign to the key.
         """
         parts = key_path.split(".")
@@ -119,17 +101,10 @@ class _Config:
         target[parts[-1]] = value
 
     def get_url(self, temporal_api: str, endpoint_type: str = "point") -> str:
-        """Returns the base URL for a specified temporal API and endpoint type.
-
-        Falls back to hardcoded NASA POWER defaults if the key is not present
-        in the loaded configuration.
-
-        Args:
-            temporal_api: The temporal resolution, either ``"daily"`` or ``"hourly"``.
-            endpoint_type: The endpoint type, either ``"point"`` or ``"regional"``.
+        """Get the base URL for a specific temporal API and endpoint type.
 
         Returns:
-            The corresponding API endpoint URL string.
+            str: The resolved URL or hardcoded default if not in config.
         """
         urls = self._data.get("base_urls", {})
         if temporal_api in urls and endpoint_type in urls[temporal_api]:
@@ -138,48 +113,27 @@ class _Config:
         return str(temporal_defaults.get(endpoint_type, ""))
 
     def params(self, group: str = "default") -> dict[str, str]:
-        """Returns a ``{code: long_name}`` mapping for a parameter group.
-
-        If the requested group does not exist, falls back to ``"default"``.
-
-        Args:
-            group: The parameter group to retrieve (e.g., ``"all"``, ``"default"``).
+        """Get a mapping of parameter codes to human-readable names.
 
         Returns:
-            A dictionary mapping NASA POWER parameter codes to human-readable names.
+            dict: A dictionary of {code: name} for the specified group.
         """
         params_root = self._data.get("params", {}) or {}
         return dict(self.get(f"params.{group}", default=params_root.get("default", {})))
 
     def param_groups(self) -> list[str]:
-        """Returns a list of available parameter group names.
-
-        Returns:
-            A list of keys from the ``"params"`` section of the config.
-        """
+        """List all available parameter group names."""
         return list(self.get("params", default={}).keys())
 
     def param_descriptions(self) -> dict[str, str]:
-        """Returns a dictionary of full agronomic descriptions per parameter code.
-
-        Returns:
-            A dictionary mapping NASA POWER parameter codes to their full descriptions.
-        """
+        """Get a mapping of parameters to their full descriptions."""
         return dict(self.get("param_descriptions", default={}))
 
     def cache_config(self) -> dict[str, Any]:
-        """Returns the caching configuration dictionary.
-
-        Path resolution priority (highest to lowest):
-
-        1. ``AIDWEATHER_CACHE_DIR`` environment variable.
-        2. A ``path`` key in ``config.json`` or configured in script.
-        3. Platform-appropriate user cache directory
-           (``~/.cache/aidweather`` on Linux, ``~/Library/Caches/aidweather``
-           on macOS, ``%LOCALAPPDATA%/aidweather/Cache`` on Windows).
+        """Get the caching configuration.
 
         Returns:
-            A dictionary of caching settings (``enabled``, ``path``, etc.).
+            dict: Config including path (resolved via env, json, or xdg).
         """
         xdg_default = user_cache_dir("aidweather", appauthor=False)
         env_override = os.environ.get("AIDWEATHER_CACHE_DIR")
@@ -203,11 +157,7 @@ class _Config:
         return {**defaults, **json_overrides}
 
     def logging_config(self) -> dict[str, Any]:
-        """Returns the logging configuration dictionary.
-
-        Returns:
-            A dictionary of logging settings (``enabled``, ``filename``, ``level``).
-        """
+        """Get the log configuration settings."""
         defaults: dict[str, Any] = {
             "enabled": False,
             "filename": "aidweather.log",
@@ -216,11 +166,7 @@ class _Config:
         return {**defaults, **self.get("logging_config", default={})}
 
     def api_limits(self) -> dict[str, Any]:
-        """Returns the NASA POWER API constraint configuration.
-
-        Returns:
-            A dictionary of API limits (e.g., max parameters per request).
-        """
+        """Get the configuration for API limits."""
         return dict(self.get("api_limits", default={}))
 
 
@@ -233,9 +179,5 @@ cfg = _Config(_config_data)
 
 
 def get_config() -> _Config:
-    """Returns the singleton ``_Config`` instance.
-
-    Returns:
-        The module-level ``cfg`` singleton.
-    """
+    """Get the singleton ``_Config`` instance."""
     return cfg

@@ -41,7 +41,7 @@ provides safe helpers for multi-point workflows.
 |---|---|---|
 | `PowerQuery` | Base Pydantic request model for date range and parameters. | `start`, `end`, `params` |
 | `PointRequest` | Request model for one point. | `lat`, `lon`, `elevation`, `wind_elevation`, `wind_surface` |
-| `ExpandedPointRequest` | Request model for transects around one point. | `axis`, `distance_km`, `num_points`, `max_workers` |
+| `TransectRequest` | Request model for a 1D transect of point API calls between two endpoints. | `start_coord`, `end_coord`, `num_points`, `spacing_km`, `max_workers` |
 | `RegionalRequest` | Request model for a regional bounding-box query. | `lat_min`, `lat_max`, `lon_min`, `lon_max` |
 
 ### `PowerClient`
@@ -62,7 +62,8 @@ Primary methods:
 | `get_point_data(request=None, **kwargs)` | Fetch data for one latitude/longitude pair. Accepts either a `PointRequest` or keyword arguments. | `pd.DataFrame` indexed by date/time |
 | `get_point_data_from_coordinate(coord, start, end, params, elevation=None, wind_elevation=None, wind_surface=None)` | Same as `get_point_data`, but starts from a `GeoCoordinate`. | `pd.DataFrame` |
 | `get_multi_point_data(points, start, end, params, max_workers=5)` | Fetch several points in parallel. Points may be dicts, tuples, or a DataFrame with `lat`/`lon`. | `(combined_df, failed_points)` |
-| `get_expanded_point_data(request=None, **kwargs)` | Generate a latitudinal or longitudinal transect and fetch each point. | Combined `pd.DataFrame` |
+| `get_transect_data(request=None, **kwargs)` | Fetch data along a 1D transect between two `GeoCoordinate` endpoints. Sampling controlled by `num_points` or `spacing_km`; minimum spacing 0.5° (~55 km) enforced. | Combined `pd.DataFrame` |
+| `get_transect_data_from_coordinates(coord_a, coord_b, start, end, params, num_points=None, spacing_km=None, max_workers=5)` | Transect helper accepting two `GeoCoordinate` objects as start and end endpoints. | `pd.DataFrame` |
 | `get_regional_data(lat_min, lat_max, lon_min, lon_max, start, end, params, request=None)` | Fetch regional data on a 0.5° grid within a bounding box (≤ 4.5° × 4.5°). Daily only, one parameter. | `pd.DataFrame` with `lat`, `lon`, `elevation` columns |
 | `get_regional_data_from_coordinates(coord_sw, coord_ne, start, end, params)` | Regional helper accepting two corner `GeoCoordinate` objects (SW and NE). | `pd.DataFrame` |
 | `summarize(df)` | Print Rich tables describing coverage, cache/network metrics, and API connection state. | `None` |
@@ -125,6 +126,7 @@ range fetching, parallel future collection, and Rich table construction:
 | `_parse_points_input(points)` | Normalize point inputs from lists or DataFrames. |
 | `_submit_point_futures(executor, parsed_points, start, end, params)` | Submit parallel point requests. |
 | `_collect_futures_results(future_to_point)` | Collect parallel results and failed point metadata. |
+| `_resolve_transect_num_points(start_coord, end_coord, num_points, spacing_km)` | Resolve and clamp transect sample count; enforces 0.5° minimum spacing. |
 | `_build_profile_table(df)` | Build the data profile summary table. |
 | `_build_perf_table()` | Build the transfer/cache performance table. |
 | `_build_stats_table()` | Build the request/cache hit-rate table. |

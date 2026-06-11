@@ -17,6 +17,7 @@ from rich.console import Console
 from rich.table import Table
 
 from aidweather.client import PowerClient
+from aidweather.geo import GeoCoordinate
 
 app = typer.Typer(
     help="CLI for fetching and analyzing agroclimatic data from NASA POWER.",
@@ -37,6 +38,25 @@ _EXTENSION_TO_FORMAT = {
     ".parquet": "parquet",
     ".pq": "parquet",
 }
+
+
+def _print_preview(df: pd.DataFrame, n: int = 5) -> None:
+    """Render the first *n* rows of *df* as a Rich table.
+
+    Uses only ``rich`` (already a project dependency), so ``tabulate`` is
+    not required.
+
+    Args:
+        df: The DataFrame to preview.
+        n: Number of rows to display.
+    """
+    preview = df.head(n).reset_index()
+    table = Table(show_header=True, header_style="bold cyan", show_lines=False)
+    for col in preview.columns:
+        table.add_column(str(col), no_wrap=True)
+    for _, row in preview.iterrows():
+        table.add_row(*[str(v) for v in row])
+    console.print(table)
 
 
 def _version_callback(value: bool) -> None:
@@ -221,7 +241,7 @@ def fetch(  # noqa: PLR0913
 
     if not no_preview:
         console.print("\n[bold blue]--- Data Preview (First 5 Rows) ---[/bold blue]")
-        console.print(df.head().to_markdown())
+        _print_preview(df)
 
     if summarize:
         client.summarize(df)
@@ -331,7 +351,7 @@ def fetch_multi(  # noqa: PLR0913
 
     if not no_preview:
         console.print("\n[bold blue]--- Data Preview (First 5 Rows) ---[/bold blue]")
-        console.print(df.head().to_markdown())
+        _print_preview(df)
 
     if summarize:
         client.summarize(df)
@@ -341,8 +361,19 @@ def fetch_multi(  # noqa: PLR0913
 
 @app.command(name="fetch-transect")
 def fetch_transect(  # noqa: PLR0913
-    lat: Annotated[float, typer.Option("--lat", help="Latitude of the center point.")],
-    lon: Annotated[float, typer.Option("--lon", help="Longitude of the center point.")],
+    lat_start: Annotated[
+        float, typer.Option("--lat-start", help="Latitude of the transect start point.")
+    ],
+    lon_start: Annotated[
+        float,
+        typer.Option("--lon-start", help="Longitude of the transect start point."),
+    ],
+    lat_end: Annotated[
+        float, typer.Option("--lat-end", help="Latitude of the transect end point.")
+    ],
+    lon_end: Annotated[
+        float, typer.Option("--lon-end", help="Longitude of the transect end point.")
+    ],
     start: Annotated[
         str, typer.Option("--start", help="Start date (e.g., YYYY-MM-DD).")
     ],
@@ -357,23 +388,31 @@ def fetch_transect(  # noqa: PLR0913
         str,
         typer.Option("--resolution", help="Temporal resolution: 'daily' or 'hourly'."),
     ] = "daily",
-    axis: Annotated[
-        str, typer.Option("--axis", help="Expansion axis: 'lat' or 'lon'.")
-    ] = "lat",
-    distance_km: Annotated[
-        float, typer.Option("--distance-km", help="Total transect length in km.")
-    ] = 10.0,
     num_points: Annotated[
-        int, typer.Option("--num-points", help="Number of sampling points.")
-    ] = 10,
+        int | None,
+        typer.Option(
+            "--num-points",
+            help=(
+                "Number of sampling points along the transect. "
+                "Takes priority over --spacing-km when both are given."
+            ),
+        ),
+    ] = None,
+    spacing_km: Annotated[
+        float | None,
+        typer.Option(
+            "--spacing-km",
+            help=(
+                "Approximate spacing between sample points in km. "
+                "Used to derive num-points when --num-points is omitted. "
+                "Minimum effective spacing is ~55 km (NASA POWER 0.5° grid)."
+            ),
+        ),
+    ] = None,
     workers: Annotated[
         int,
         typer.Option("--workers", help="Max concurrent requests (NASA recommends ≤5)."),
     ] = 5,
-    elevation: Annotated[
-        float | None,
-        typer.Option("--elevation", help="Optional uniform site elevation in meters."),
-    ] = None,
     output: Annotated[
         Path | None, typer.Option("--output", help="Optional path to save data.")
     ] = None,
@@ -394,7 +433,13 @@ def fetch_transect(  # noqa: PLR0913
         bool, typer.Option("--summarize", help="Print summary panel.")
     ] = False,
 ):
-    """Fetch weather data across a linear transect of points expanding from a center coordinate."""
+    """Fetch weather data along a 1D transect between two geographic endpoints.
+
+    Points are sampled evenly along the straight-line path from the start to
+    the end coordinate. Provide either --num-points or --spacing-km to control
+    sampling density. The minimum effective spacing is ~55 km (NASA POWER
+    native 0.5° grid resolution); finer requests are clamped automatically.
+    """
     param_list = [p.strip() for p in params.split(",") if p.strip()]
     parsed_start = _parse_date(start)
     parsed_end = _parse_date(end)
@@ -405,22 +450,24 @@ def fetch_transect(  # noqa: PLR0913
         )
         raise typer.Exit(code=1)
 
-    if axis not in ["lat", "lon"]:
-        console.print("[bold red]❌ Error:[/bold red] axis must be 'lat' or 'lon'.")
+    if num_points is None and spacing_km is None:
+        console.print(
+            "[bold red]❌ Error:[/bold red] Provide --num-points or --spacing-km."
+        )
         raise typer.Exit(code=1)
 
     try:
+        coord_a = GeoCoordinate.from_decimal(lat_start, lon_start)
+        coord_b = GeoCoordinate.from_decimal(lat_end, lon_end)
         client = PowerClient(temporal_api=resolution)
-        df = client.get_expanded_point_data(
-            lat=lat,
-            lon=lon,
+        df = client.get_transect_data_from_coordinates(
+            coord_a=coord_a,
+            coord_b=coord_b,
             start=parsed_start,
             end=parsed_end,
             params=param_list,
-            axis=axis,
-            distance_km=distance_km,
             num_points=num_points,
-            elevation=elevation,
+            spacing_km=spacing_km,
             max_workers=workers,
         )
     except Exception as e:
@@ -435,7 +482,7 @@ def fetch_transect(  # noqa: PLR0913
 
     if not no_preview:
         console.print("\n[bold blue]--- Data Preview (First 5 Rows) ---[/bold blue]")
-        console.print(df.head().to_markdown())
+        _print_preview(df)
 
     if summarize:
         client.summarize(df)
@@ -446,16 +493,20 @@ def fetch_transect(  # noqa: PLR0913
 @app.command(name="fetch-regional")
 def fetch_regional(  # noqa: PLR0913
     lat_min: Annotated[
-        float, typer.Option("--lat-min", help="Southern edge of the bounding box (latitude).")
+        float,
+        typer.Option("--lat-min", help="Southern edge of the bounding box (latitude)."),
     ],
     lat_max: Annotated[
-        float, typer.Option("--lat-max", help="Northern edge of the bounding box (latitude).")
+        float,
+        typer.Option("--lat-max", help="Northern edge of the bounding box (latitude)."),
     ],
     lon_min: Annotated[
-        float, typer.Option("--lon-min", help="Western edge of the bounding box (longitude).")
+        float,
+        typer.Option("--lon-min", help="Western edge of the bounding box (longitude)."),
     ],
     lon_max: Annotated[
-        float, typer.Option("--lon-max", help="Eastern edge of the bounding box (longitude).")
+        float,
+        typer.Option("--lon-max", help="Eastern edge of the bounding box (longitude)."),
     ],
     start: Annotated[
         str, typer.Option("--start", help="Start date (e.g., YYYY-MM-DD).")
@@ -524,7 +575,7 @@ def fetch_regional(  # noqa: PLR0913
 
     if not no_preview:
         console.print("\n[bold blue]--- Data Preview (First 5 Rows) ---[/bold blue]")
-        console.print(df.head().to_markdown())
+        _print_preview(df)
 
     if summarize:
         client.summarize(df)

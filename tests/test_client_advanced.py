@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from unittest.mock import patch
 from aidweather.geo import GeoCoordinate
-from aidweather.client import PowerClient, ExpandedPointRequest
+from aidweather.client import PowerClient, TransectRequest
 
 SAMPLE_POINT_RESPONSE = {
     "header": {
@@ -166,8 +166,8 @@ def test_get_regional_data_from_coordinates_success(mock_session):
     assert mock_session.last_request.qs["latitude-max"] == ["21.0"]
 
 
-def test_get_expanded_point_data_success(mock_session):
-    """Verify get_expanded_point_data correctly generates transect coordinates and fetches concurrently."""
+def test_get_transect_data_success(mock_session):
+    """Verify get_transect_data generates transect coordinates and fetches concurrently."""
     mock_session.get(
         "https://power.larc.nasa.gov/api/temporal/daily/point",
         json=SAMPLE_POINT_RESPONSE,
@@ -175,15 +175,16 @@ def test_get_expanded_point_data_success(mock_session):
     client = PowerClient()
     client.cache_cfg["enabled"] = False
 
-    # Perform a minimal transect search with 3 generated points
-    df = client.get_expanded_point_data(
-        lat=15.0,
-        lon=-40.0,
+    coord_a = GeoCoordinate.from_decimal(15.0, -40.0)
+    # ~555 km north along the same meridian – guarantees > 0.5° spacing per point
+    coord_b = GeoCoordinate.from_decimal(20.0, -40.0)
+
+    df = client.get_transect_data(
+        start_coord=coord_a,
+        end_coord=coord_b,
         start="2023-01-01",
         end="2023-01-02",
         params=["T2M"],
-        axis="lat",
-        distance_km=5.0,
         num_points=3,
         max_workers=2,
     )
@@ -191,8 +192,67 @@ def test_get_expanded_point_data_success(mock_session):
     assert not df.empty
     assert "lat" in df.columns
     assert "lon" in df.columns
-    # Check that it generated 3 unique locations along the latitude axis
+    # 3 unique locations along the latitude axis
     assert df["lat"].nunique() == 3
+
+
+def test_get_transect_data_from_coordinates_success(mock_session):
+    """Verify get_transect_data_from_coordinates convenience wrapper dispatches correctly."""
+    mock_session.get(
+        "https://power.larc.nasa.gov/api/temporal/daily/point",
+        json=SAMPLE_POINT_RESPONSE,
+    )
+    client = PowerClient()
+    client.cache_cfg["enabled"] = False
+
+    coord_a = GeoCoordinate.from_decimal(15.0, -40.0)
+    coord_b = GeoCoordinate.from_decimal(20.0, -40.0)
+
+    df = client.get_transect_data_from_coordinates(
+        coord_a=coord_a,
+        coord_b=coord_b,
+        start="2023-01-01",
+        end="2023-01-02",
+        params=["T2M"],
+        num_points=3,
+        max_workers=2,
+    )
+
+    assert not df.empty
+    assert "lat" in df.columns
+    assert df["lat"].nunique() == 3
+
+
+def test_get_transect_data_spacing_clamped():
+    """Verify that sub-0.5° spacing is clamped to avoid redundant API calls."""
+    # A very short transect (~5 km) where 20 points would be way under the 0.5° minimum
+    coord_a = GeoCoordinate.from_decimal(15.0, -40.0)
+    coord_b = GeoCoordinate.from_decimal(15.045, -40.0)  # ~5 km north
+
+    resolved = PowerClient._resolve_transect_num_points(
+        start_coord=coord_a,
+        end_coord=coord_b,
+        num_points=20,
+        spacing_km=None,
+    )
+    # Minimum is 2 (the two endpoints)
+    assert resolved == 2
+
+
+def test_get_transect_data_spacing_km_derives_num_points():
+    """Verify spacing_km is converted to num_points correctly."""
+    coord_a = GeoCoordinate.from_decimal(0.0, 0.0)
+    # ~555 km north
+    coord_b = GeoCoordinate.from_decimal(5.0, 0.0)
+
+    resolved = PowerClient._resolve_transect_num_points(
+        start_coord=coord_a,
+        end_coord=coord_b,
+        num_points=None,
+        spacing_km=111.0,  # ~1° spacing => expect ~6 points
+    )
+    # total ~555 km / 111 km + 1 = 6
+    assert resolved >= 2
 
 
 def test_summarize_console_logging(capsys):

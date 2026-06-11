@@ -256,41 +256,34 @@ def test_fetch_multi_success(mock_client_class, tmp_path):
 
 @patch("aidweather.cli.PowerClient")
 def test_fetch_transect_success(mock_client_class, tmp_path):
-    """Test 'fetch-transect' command successfully fetches coordinate expansions."""
+    """Test 'fetch-transect' command successfully fetches transect data between two endpoints."""
     mock_client = mock_client_class.return_value
     dummy_df = pd.DataFrame(
         {"lat": [12.3, 12.4], "lon": [45.6, 45.6], "T2M": [15.0, 16.0]},
         index=pd.to_datetime(["2023-01-01", "2023-01-01"]),
     )
     dummy_df.index.name = "date"
-    mock_client.get_expanded_point_data.return_value = dummy_df
+    mock_client.get_transect_data_from_coordinates.return_value = dummy_df
 
     output_csv = tmp_path / "transect.csv"
     result = runner.invoke(
         app,
         [
             "fetch-transect",
-            "--lat",
-            "12.3",
-            "--lon",
-            "45.6",
-            "--start",
-            "2023-01-01",
-            "--end",
-            "2023-01-01",
-            "--output",
-            str(output_csv),
-            "--axis",
-            "lat",
-            "--distance-km",
-            "10",
-            "--num-points",
-            "2",
+            "--lat-start", "12.3",
+            "--lon-start", "45.6",
+            "--lat-end",   "17.3",
+            "--lon-end",   "45.6",
+            "--start", "2023-01-01",
+            "--end",   "2023-01-01",
+            "--num-points", "2",
+            "--output", str(output_csv),
         ],
     )
     assert result.exit_code == 0
     assert "Data saved to" in result.stdout
     assert output_csv.exists()
+
 
 
 def test_cache_clear_success(tmp_path):

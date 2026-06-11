@@ -51,6 +51,7 @@ config = get_config()
 print("Daily point URL  :", config.get_url("daily", "point"))
 print("Hourly point URL :", config.get_url("hourly", "point"))
 
+
 # %% [markdown]
 # ### Available parameter groups
 #
@@ -64,13 +65,22 @@ for code, label in default_params.items():
     print(f"  {code:<22} {label}")
 
 # %% [markdown]
+# The "all" group contains all available parameters.
+
+# %%
+all_params = config.params("all")
+print(f"All group — {len(all_params)} parameters:\n")
+for code, label in all_params.items():
+    print(f"  {code:<22} {label}")
+
+# %% [markdown]
 # ### Parameter descriptions
 #
 # Each parameter has a longer description stored in the config.
 
 # %%
 descriptions = config.param_descriptions()
-for code in ["T2M", "PRECTOTCORR", "ALLSKY_SFC_PAR_TOT", "T2MDEW"]:
+for code in all_params:
     print(f"[{code}]\n  {descriptions.get(code, 'n/a')}\n")
 
 # %% [markdown]
@@ -121,7 +131,7 @@ print("DMS :", coord.to_dms_str(second_precision=2))
 
 # %%
 try:
-    GeoCoordinate.from_decimal(95.0, -46.63)   # latitude > 90 is invalid
+    GeoCoordinate.from_decimal(95.0, -46.63)  # latitude > 90 is invalid
 except ValueError as e:
     print("Caught:", e)
 
@@ -143,13 +153,13 @@ except ValueError as e:
 # %%
 client = PowerClient(temporal_api="daily")
 
-lat, lon = -23.31, -51.16          # Londrina, PR, Brazil
+lat, lon = -23.31, -51.16  # Londrina, PR, Brazil
 start, end = "2023-01-01", "2023-01-15"
 params = ["T2M", "PRECTOTCORR", "ALLSKY_SFC_PAR_TOT"]
 
 df = client.get_point_data(lat=lat, lon=lon, start=start, end=end, params=params)
 
-print(df.shape)   # (days, parameters)
+print(df.shape)  # (days, parameters)
 print(df.head())
 
 # %% [markdown]
@@ -199,7 +209,7 @@ db_path = Path(cache_cfg.get("path", ".")) / "aidweather_cache.db"
 if db_path.exists():
     db_path.unlink()
 
-client = PowerClient(temporal_api="daily")   # re-init on fresh DB
+client = PowerClient(temporal_api="daily")  # re-init on fresh DB
 
 t0 = time.perf_counter()
 df_cold = client.get_point_data(lat=lat, lon=lon, start=start, end=end, params=params)
@@ -220,8 +230,10 @@ print(f"Hot request  : {t_hot:.3f} s  ({t_cold / t_hot:.0f}× faster)")
 
 # %%
 df_ext = client.get_point_data(
-    lat=lat, lon=lon,
-    start="2023-01-10", end="2023-01-25",   # overlaps with cached range
+    lat=lat,
+    lon=lon,
+    start="2023-01-10",
+    end="2023-01-25",  # overlaps with cached range
     params=params,
 )
 
@@ -232,21 +244,29 @@ print("Rows returned :", len(df_ext))
 # ---
 # ## 5 · Multi-point fetching
 #
-# ### `get_expanded_point_data` — spatial transect
+# ### `get_transect_data` — 1D spatial transect
 #
-# Generates evenly-spaced points along a lat or lon axis centred on a
-# reference coordinate, then fetches all of them in parallel.
+# Fetches data for evenly-spaced points along a straight-line path between two
+# `GeoCoordinate` endpoints. Each point is resolved in parallel via the standard
+# point API, so you can request multiple parameters.
+#
+# The minimum point spacing is **0.5° (~55 km)** to match the NASA POWER native
+# grid resolution. If the requested density exceeds this, `num_points` is clamped
+# automatically and an `INFO` message is logged.
 
 # %%
-df_transect = client.get_expanded_point_data(
-    lat=-23.31,
-    lon=-51.16,
+from aidweather import GeoCoordinate
+
+coord_a = GeoCoordinate.from_decimal(-25.0, -51.16)  # southern end
+coord_b = GeoCoordinate.from_decimal(-20.0, -51.16)  # northern end (~555 km)
+
+df_transect = client.get_transect_data(
+    start_coord=coord_a,
+    end_coord=coord_b,
     start="2023-01-01",
     end="2023-01-05",
     params=["T2M", "PRECTOTCORR"],
-    axis="lat",          # spread points north–south
-    distance_km=20.0,
-    num_points=3,
+    num_points=3,  # 3 evenly-spaced points along the path
     max_workers=3,
 )
 
@@ -257,25 +277,49 @@ print()
 print(df_transect.head(9))
 
 # %% [markdown]
+# You can also use `spacing_km` instead of `num_points` to control density,
+# or use the convenience wrapper `get_transect_data_from_coordinates`:
+
+# %%
+df_transect_spacing = client.get_transect_data_from_coordinates(
+    coord_a=coord_a,
+    coord_b=coord_b,
+    start="2023-01-01",
+    end="2023-01-05",
+    params=["T2M"],
+    spacing_km=200,  # one point every ~200 km
+    max_workers=3,
+)
+print("Points fetched (spacing_km=200):", df_transect_spacing["lat"].nunique())
+
+# %% [markdown]
 # ### `get_multi_point_data` — arbitrary list of locations
 #
-# Pass a list of dicts (or a DataFrame) with `lat`, `lon`, `start`, `end`, and
-# `params` keys. Each location is fetched concurrently.
+# Pass a list of dicts with `lat` and `lon` keys (plus optional `name` and
+# `elevation`). Returns a combined DataFrame and a list of any failed points.
 
 # %%
 locations = [
-    {"lat": -23.31, "lon": -51.16, "start": "2023-01-01", "end": "2023-01-05", "params": ["T2M"]},
-    {"lat": -15.78, "lon": -47.93, "start": "2023-01-01", "end": "2023-01-05", "params": ["T2M"]},
-    {"lat": -30.03, "lon": -51.23, "start": "2023-01-01", "end": "2023-01-05", "params": ["T2M"]},
+    {"lat": -23.31, "lon": -51.16, "name": "Londrina"},
+    {"lat": -15.78, "lon": -47.93, "name": "Brasília"},
+    {"lat": -30.03, "lon": -51.23, "name": "Porto Alegre"},
 ]
 
-results = client.get_multi_point_data(locations, max_workers=3)
+df_multi, failed = client.get_multi_point_data(
+    points=locations,
+    start="2023-01-01",
+    end="2023-01-05",
+    params=["T2M"],
+    max_workers=3,
+)
 
-print("Results type:", type(results))
-for key, df_loc in results.items():
-    lat_k, lon_k = key
-    print(f"  ({lat_k}, {lon_k})  →  {len(df_loc)} rows, mean T2M = {df_loc['T2M'].mean():.2f} °C")
+print("Multi-point shape:", df_multi.shape)
+if failed:
+    print("Failed points:", failed)
 
+mean_temperatures = df_multi.groupby(["name"])["T2M"].mean()
+
+print(mean_temperatures)
 # %% [markdown]
 # ---
 # ## 6 · Data cleanup — `ensure_date_column`
@@ -287,14 +331,24 @@ for key, df_loc in results.items():
 
 # %%
 # --- Scenario A: non-standard column name with timestamp strings ---
-raw_a = pd.DataFrame({
-    "obs_date": ["2023-05-15 08:30:00", "2023-05-16 12:45:00", "2023-05-17 19:15:00"],
-    "T2M": [18.5, 20.2, 17.8],
-})
+raw_a = pd.DataFrame(
+    {
+        "obs_date": [
+            "2023-05-15 08:30:00",
+            "2023-05-16 12:45:00",
+            "2023-05-17 19:15:00",
+        ],
+        "T2M": [18.5, 20.2, 17.8],
+    }
+)
 
-clean_a = ensure_date_column(raw_a, name="date", candidates=["obs_date", "measurement_time"])
-print("Before:"); print(raw_a)
-print("\nAfter :"); print(clean_a)
+clean_a = ensure_date_column(
+    raw_a, name="date", candidates=["obs_date", "measurement_time"]
+)
+print("Before:")
+print(raw_a)
+print("\nAfter :")
+print(clean_a)
 print("dtype :", clean_a["date"].dtype)
 
 # %%
@@ -305,8 +359,10 @@ raw_b = pd.DataFrame(
 )
 
 clean_b = ensure_date_column(raw_b, name="date", index_fallback=True)
-print("Before:"); print(raw_b)
-print("\nAfter :"); print(clean_b)
+print("Before:")
+print(raw_b)
+print("\nAfter :")
+print(clean_b)
 
 # %% [markdown]
 # ---
@@ -319,9 +375,14 @@ print("\nAfter :"); print(clean_b)
 # | `normalize_coord_input` | One-call parsing for mixed float/string coordinate tuples |
 # | `PowerClient.get_point_data` | Fetch daily or hourly data for one location |
 # | `PowerClient.get_multi_point_data` | Fetch for multiple locations in parallel |
-# | `PowerClient.get_expanded_point_data` | Build and fetch a spatial transect |
+# | `PowerClient.get_transect_data` | Fetch a 1D transect between two `GeoCoordinate` endpoints |
+# | `PowerClient.get_transect_data_from_coordinates` | Convenience wrapper for transects using two corner coords |
+# | `PowerClient.get_regional_data` | Fetch a 0.5° grid within a bounding box (1 param, daily only) |
+# | `PowerClient.get_regional_data_from_coordinates` | Regional fetch using two corner `GeoCoordinate` objects |
 # | `PowerClient.summarize` | Print a formatted overview of any fetched DataFrame |
 # | `ensure_date_column` | Normalise date columns in any DataFrame |
 #
 # All fetched data is cached locally. Subsequent calls for the same
 # location and date range return immediately from disk.
+
+# %%

@@ -488,10 +488,28 @@ class PointRequest(PowerQuery):
     wind_surface: float | None = None
 
 
-class ExpandedPointRequest(PointRequest):
-    axis: Literal["lat", "lon"] = "lat"
-    distance_km: float = 10.0
-    num_points: int = 10
+class TransectRequest(PowerQuery):
+    """Request model for a 1D transect of individual point API calls.
+
+    Defines a straight-line transect between two ``GeoCoordinate`` endpoints.
+    Points are sampled along the path at a minimum spacing of 0.5° (~55 km)
+    to match the NASA POWER native grid resolution — requesting denser
+    spacing would return duplicate data.
+
+    Attributes:
+        start_coord: Starting endpoint of the transect.
+        end_coord: Ending endpoint of the transect.
+        num_points: Number of sample points (takes priority over
+            ``spacing_km`` when both are supplied).
+        spacing_km: Approximate spacing between samples in kilometres.
+            Derived and logged when ``num_points`` is also given.
+        max_workers: Thread-pool size for concurrent point fetching.
+    """
+
+    start_coord: GeoCoordinate
+    end_coord: GeoCoordinate
+    num_points: int | None = None
+    spacing_km: float | None = None
     max_workers: int = 5
 
 
@@ -1418,84 +1436,212 @@ class PowerClient:
             params=params,
         )
 
-    def get_expanded_point_data(
-        self,
-        request: ExpandedPointRequest | None = None,
-        **kwargs,
-    ) -> pd.DataFrame:
-        """Generates a line of points and fetches data for them in parallel.
+    # ------------------------------------------------------------------
+    # Transect helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_transect_num_points(
+        start_coord: GeoCoordinate,
+        end_coord: GeoCoordinate,
+        num_points: int | None,
+        spacing_km: float | None,
+    ) -> int:
+        """Resolves the number of sample points for a transect.
+
+        ``num_points`` takes priority when both arguments are supplied;
+        the effective spacing is then derived and logged as INFO.
+
+        The minimum allowed point spacing is 0.5° (~55 km) to match the
+        NASA POWER grid resolution. Requesting finer spacing would return
+        duplicate data; the count is clamped and an INFO message is emitted.
 
         Args:
-            request: Configuration object.
-            **kwargs: Configuration parameters as keyword arguments.
+            start_coord: Starting endpoint of the transect.
+            end_coord: Ending endpoint of the transect.
+            num_points: Explicit number of sample points, or ``None``.
+            spacing_km: Approximate spacing between samples in km, or ``None``.
 
         Returns:
-            A combined DataFrame with data for all points along the transect.
+            The resolved (and possibly clamped) number of sample points.
 
         Raises:
-            IOError: If fetching data for all generated points fails.
+            ValueError: If neither ``num_points`` nor ``spacing_km`` is provided.
+        """
+        # Great-circle distance approximation between the two endpoints
+        lat1, lon1 = start_coord.as_decimal()
+        lat2, lon2 = end_coord.as_decimal()
+        dlat_km = (lat2 - lat1) * 111.1
+        mid_lat_rad = np.deg2rad((lat1 + lat2) / 2)
+        dlon_km = (lon2 - lon1) * 111.32 * np.cos(mid_lat_rad)
+        total_km = float(np.hypot(dlat_km, dlon_km))
+
+        # Minimum spacing the API can meaningfully resolve
+        min_spacing_km = 0.5 * 111.1  # ~55.55 km per 0.5°
+
+        if num_points is not None and spacing_km is not None:
+            effective_spacing = total_km / max(num_points - 1, 1)
+            logger.info(
+                "Both num_points=%d and spacing_km=%.1f were supplied. "
+                "num_points takes priority (effective spacing ≈ %.1f km).",
+                num_points,
+                spacing_km,
+                effective_spacing,
+            )
+        elif num_points is not None:
+            pass  # use as-is; validate below
+        elif spacing_km is not None:
+            if spacing_km <= 0:
+                raise ValueError("spacing_km must be positive.")
+            num_points = max(2, int(round(total_km / spacing_km)) + 1)
+            logger.info(
+                "Derived num_points=%d from spacing_km=%.1f over %.1f km transect.",
+                num_points,
+                spacing_km,
+                total_km,
+            )
+        else:
+            raise ValueError(
+                "TransectRequest requires either 'num_points' or 'spacing_km'."
+            )
+
+        # Clamp to avoid sub-resolution sampling
+        if num_points > 1:
+            effective_spacing = total_km / (num_points - 1)
+            if effective_spacing < min_spacing_km:
+                max_allowed = max(2, int(total_km / min_spacing_km) + 1)
+                logger.info(
+                    "Requested num_points=%d would give %.1f km spacing, "
+                    "below the NASA POWER 0.5° grid resolution (~55 km). "
+                    "Clamping to %d points.",
+                    num_points,
+                    effective_spacing,
+                    max_allowed,
+                )
+                num_points = max_allowed
+
+        return max(2, num_points)
+
+    def get_transect_data(
+        self,
+        request: TransectRequest | None = None,
+        **kwargs,
+    ) -> pd.DataFrame:
+        """Generates a 1D transect of points and fetches data for them in parallel.
+
+        Points are distributed evenly along the straight-line path from
+        ``start_coord`` to ``end_coord``.  Sampling density is controlled
+        by ``num_points`` or ``spacing_km`` (see :class:`TransectRequest`).
+        The minimum point spacing is enforced at 0.5° (~55 km) to avoid
+        fetching duplicate data from the same NASA POWER grid cell.
+
+        Args:
+            request: A :class:`TransectRequest` configuration object. When
+                omitted, one is constructed from the keyword arguments.
+            **kwargs: Keyword arguments forwarded to :class:`TransectRequest`.
+
+        Returns:
+            A combined DataFrame indexed by date with ``lat``, ``lon``, and
+            one column per requested parameter.
+
+        Raises:
+            ValueError: If neither ``num_points`` nor ``spacing_km`` is given,
+                or if the sampling density cannot be resolved.
+            OSError: If fetching data for *all* generated points fails.
         """
         if request is None:
-            request = ExpandedPointRequest(**kwargs)
+            request = TransectRequest(**kwargs)
 
-        lat = request.lat
-        lon = request.lon
-        start = request.start
-        end = request.end
-        params = request.params
-        axis = request.axis
-        distance_km = request.distance_km
-        num_points = request.num_points
-        elevation = request.elevation
+        n = self._resolve_transect_num_points(
+            request.start_coord,
+            request.end_coord,
+            request.num_points,
+            request.spacing_km,
+        )
+
+        lat1, lon1 = request.start_coord.as_decimal()
+        lat2, lon2 = request.end_coord.as_decimal()
+        lats = np.linspace(lat1, lat2, n)
+        lons = np.linspace(lon1, lon2, n)
+
         max_workers = request.max_workers
-        points = []
-        km_per_lat_deg = 111.1
-        km_per_lon_deg = 111.32 * np.cos(np.deg2rad(lat))
-
-        if axis == "lat":
-            lat_delta_deg = distance_km / km_per_lat_deg
-            lat_start, lat_end = lat - lat_delta_deg / 2, lat + lat_delta_deg / 2
-            lats = np.linspace(lat_start, lat_end, num_points)
-            points = [(round(p_lat, 4), round(lon, 4)) for p_lat in lats]
-        else:
-            lon_delta_deg = distance_km / km_per_lon_deg
-            lon_start, lon_end = lon - lon_delta_deg / 2, lon + lon_delta_deg / 2
-            lons = np.linspace(lon_start, lon_end, num_points)
-            points = [(round(lat, 4), round(p_lon, 4)) for p_lon in lons]
-
         limit = getattr(self, "max_workers_limit", 5)
         if max_workers > limit:
             logger.warning(
-                f"Requested max_workers ({max_workers}) exceeds the configured limit of {limit}. "
-                f"Enforcing limit of {limit}."
+                "Requested max_workers (%d) exceeds the configured limit of %d. "
+                "Enforcing limit of %d.",
+                max_workers,
+                limit,
+                limit,
             )
             max_workers = limit
 
-        logger.info(f"Generated {len(points)} points along the {axis} axis.")
+        logger.info("Generated %d transect points from %s to %s.", n, request.start_coord, request.end_coord)
 
-        points_with_metadata: list[dict[str, Any]] = []
-        for i, (p_lat, p_lon) in enumerate(points):
-            pt = {"lat": p_lat, "lon": p_lon, "name": f"Point_{i + 1}"}
-            if elevation is not None:
-                pt["elevation"] = elevation
-            points_with_metadata.append(pt)
+        points_with_metadata: list[dict[str, Any]] = [
+            {"lat": round(p_lat, 4), "lon": round(p_lon, 4), "name": f"Point_{i + 1}"}
+            for i, (p_lat, p_lon) in enumerate(zip(lats, lons))
+        ]
 
         df, failed_points = self.get_multi_point_data(
             points=points_with_metadata,
-            start=start,
-            end=end,
-            params=params,
+            start=request.start,
+            end=request.end,
+            params=request.params,
             max_workers=max_workers,
         )
 
-        # If the operation resulted in a completely empty dataframe because all
-        # points failed, raise an error to make the failure explicit.
         if df.empty and failed_points:
             raise OSError(
-                f"Failed to fetch data for all {len(failed_points)} points in the expansion. "
+                f"Failed to fetch data for all {len(failed_points)} transect points."
             )
 
         return df
+
+    def get_transect_data_from_coordinates(
+        self,
+        coord_a: GeoCoordinate,
+        coord_b: GeoCoordinate,
+        start: str,
+        end: str,
+        params: list[str],
+        num_points: int | None = None,
+        spacing_km: float | None = None,
+        max_workers: int = 5,
+    ) -> pd.DataFrame:
+        """Convenience wrapper for :meth:`get_transect_data` using two corner coordinates.
+
+        Mirrors the pattern of :meth:`get_regional_data_from_coordinates`.
+        The two ``GeoCoordinate`` objects define the start and end endpoints
+        of the transect.
+
+        Args:
+            coord_a: Starting endpoint of the transect.
+            coord_b: Ending endpoint of the transect.
+            start: Start date for the data query (e.g. ``"20230101"``).
+            end: End date for the data query (e.g. ``"20230131"``).
+            params: List of POWER API parameter names to fetch.
+            num_points: Number of sample points (takes priority over
+                ``spacing_km`` when both are supplied).
+            spacing_km: Approximate spacing between samples in km.
+            max_workers: Thread-pool size for concurrent requests.
+
+        Returns:
+            A combined DataFrame indexed by date with ``lat``, ``lon``, and
+            one column per requested parameter.
+        """
+        return self.get_transect_data(
+            TransectRequest(
+                start_coord=coord_a,
+                end_coord=coord_b,
+                start=start,
+                end=end,
+                params=params,
+                num_points=num_points,
+                spacing_km=spacing_km,
+                max_workers=max_workers,
+            )
+        )
 
     def __repr__(self) -> str:
         return f"<PowerClient(api='{self.temporal_api}', url='{self.base_url}')>"

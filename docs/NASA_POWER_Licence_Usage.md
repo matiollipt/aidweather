@@ -31,9 +31,8 @@ When possible, provide a link to the NASA POWER website: [https://power.larc.nas
 ## 3. Data Usage Guidelines for End-Users
 
 ### API Service Limits
-AidWeather is designed to respect NASA's service limits. Users should be aware of the following tiers:
-- **Unauthenticated (IP-based)**: Generally limited to 30,000 requests per day.
-- **Personal API Key**: Recommended for production use to ensure higher throughput and reliability.
+AidWeather is designed to respect NASA's service limits. Users should be aware of the following:
+- **IP-based access**: Generally limited to 30,000 requests per day.
 
 ### Security and Caching
 - **Local Caching**: AidWeather caches data locally in a SQLite database (`aidweather_cache.db`). Note that while data is compressed, it is **not encrypted at rest**. Users operating on shared systems should secure their cache directories.

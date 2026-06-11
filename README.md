@@ -68,6 +68,28 @@ df = client.get_point_data(
 print(df.head())
 ```
 
+### 1D transect
+
+Fetch data along a straight-line path between two endpoints. Sampling is controlled
+by `num_points` or `spacing_km`; the 0.5° NASA POWER grid resolution (~55 km) is
+enforced as a minimum spacing:
+
+```python
+from aidweather import GeoCoordinate
+
+coord_a = GeoCoordinate.from_decimal(-25.0, -48.0)
+coord_b = GeoCoordinate.from_decimal(-20.0, -48.0)  # ~555 km north
+
+df = client.get_transect_data(
+    start_coord=coord_a,
+    end_coord=coord_b,
+    start="2023-01-01", end="2023-01-31",
+    params=["T2M", "PRECTOTCORR"],
+    num_points=5,
+)
+print(df.head())  # DataFrame with lat, lon columns + parameters
+```
+
 ### Regional grid data
 
 Fetch data on a 0.5° × 0.5° grid within a bounding box (max 4.5° × 4.5°, one parameter per request):
@@ -102,10 +124,12 @@ EOF
 aidweather fetch-multi --points-file sites.csv \
     --start 2023-01-01 --end 2023-12-31 --output multi.parquet --format parquet
 
-# Fetch along a spatial transect
-aidweather fetch-transect --lat -23.55 --lon -46.63 \
+# Fetch along a spatial transect (start and end coordinates)
+aidweather fetch-transect \
+    --lat-start -25.0 --lon-start -48.0 \
+    --lat-end   -20.0 --lon-end   -48.0 \
     --start 2023-01-01 --end 2023-01-31 \
-    --axis lat --distance-km 50 --num-points 10
+    --num-points 5
 
 # Fetch regional grid data for a bounding box
 aidweather fetch-regional --lat-min -23.5 --lat-max -20.0 \

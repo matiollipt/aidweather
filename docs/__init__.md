@@ -41,7 +41,7 @@ print(df.head())
 
 | Module | Main export | Use it for |
 |---|---|---|
-| `client` | `PowerClient`, `PointRequest`, `ExpandedPointRequest` | Fetching weather data (single point, multi-point, transect, regional) |
+| `client` | `PowerClient`, `PointRequest`, `TransectRequest` | Fetching weather data (single point, multi-point, transect, regional) |
 | `geo` | `GeoCoordinate`, `normalize_coord_input`, coordinate parsers | Parsing, validating, and converting coordinates |
 | `config` | `cfg`, `get_config` | Accessing API URLs, parameter catalogues, cache settings |
 | `utils` | `ensure_date_column`, `DateColumnOptions` | Standardizing date columns before merging with your own data |

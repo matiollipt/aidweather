@@ -33,9 +33,7 @@ Priority order when resolving the path:
 3. Platform default (see table above)
 
 
-
 ---
-
 
 ## Accessing config values in code
 
