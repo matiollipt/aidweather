@@ -5,6 +5,7 @@ import json
 from unittest.mock import patch
 
 import pytest
+
 from aidweather.config import _Config, _load_config_dict, cfg
 
 # --- Fixtures ---

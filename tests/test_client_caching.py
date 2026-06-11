@@ -4,8 +4,9 @@ import os
 import pandas as pd
 import pytest
 import requests_mock
-from aidweather.config import cfg
+
 from aidweather.client import PowerClient
+from aidweather.config import cfg
 
 
 @pytest.fixture

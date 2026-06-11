@@ -22,19 +22,19 @@
 
 # %%
 import time
-import pandas as pd
 from pathlib import Path
 
+import pandas as pd
+
 from aidweather import (
-    PowerClient,
     GeoCoordinate,
-    normalize_coord_input,
-    cfg,
-    get_config,
+    PowerClient,
     ensure_date_column,
+    get_config,
+    normalize_coord_input,
 )
 
-print(f"aidweather ready.")
+print("aidweather ready.")
 
 # %% [markdown]
 # ---

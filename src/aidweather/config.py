@@ -78,7 +78,7 @@ class _Config:
         Returns:
             The value at key_path or default if missing.
         """
-        value = self._data
+        value: Any = self._data
         for key in key_path.split("."):
             value = value.get(key) if isinstance(value, dict) else None
             if value is None:

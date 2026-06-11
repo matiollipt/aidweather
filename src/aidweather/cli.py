@@ -1,22 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
-
 """
 Command Line Interface for the AidWeather Power Client.
 """
+from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, cast
 
 import pandas as pd
 import typer
-from aidweather import __version__
-from aidweather.config import cfg
 from rich.console import Console
 from rich.table import Table
 
+from aidweather import __version__
 from aidweather.client import PowerClient
+from aidweather.config import cfg
 from aidweather.geo import GeoCoordinate
 
 app = typer.Typer(
@@ -149,7 +148,7 @@ def _save_output(df: pd.DataFrame, output: Path | None, fmt: str | None) -> None
             )
     except Exception as exc:
         console.print(f"[bold red]❌ Error saving to file:[/bold red] {exc}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command()
@@ -210,7 +209,7 @@ def fetch(  # noqa: PLR0913
         raise typer.Exit(code=1)
 
     try:
-        client = PowerClient(temporal_api=resolution)
+        client = PowerClient(temporal_api=cast(Literal["daily", "hourly"], resolution))
         df = client.get_point_data(
             lat=lat,
             lon=lon,
@@ -231,7 +230,7 @@ def fetch(  # noqa: PLR0913
 
     except Exception as e:
         console.print(f"[bold red]Error fetching data:[/bold red] {e}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
     if df.empty:
         console.print(
@@ -320,7 +319,7 @@ def fetch_multi(  # noqa: PLR0913
 
         points: list[dict[str, Any]] = []
         for _, row in points_df.iterrows():
-            pt = {"lat": float(row["lat"]), "lon": float(row["lon"])}
+            pt: dict[str, Any] = {"lat": float(row["lat"]), "lon": float(row["lon"])}
             if "elevation" in points_df.columns and not pd.isna(row["elevation"]):
                 pt["elevation"] = float(row["elevation"])
             if "name" in points_df.columns and not pd.isna(row["name"]):
@@ -328,10 +327,10 @@ def fetch_multi(  # noqa: PLR0913
             points.append(pt)
     except Exception as e:
         console.print(f"[bold red]❌ Error reading points file:[/bold red] {e}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
     try:
-        client = PowerClient(temporal_api=resolution)
+        client = PowerClient(temporal_api=cast(Literal["daily", "hourly"], resolution))
         df, _failed = client.get_multi_point_data(
             points=points,
             start=parsed_start,
@@ -341,7 +340,7 @@ def fetch_multi(  # noqa: PLR0913
         )
     except Exception as e:
         console.print(f"[bold red]Error fetching multi-point data:[/bold red] {e}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
     if df.empty:
         console.print(
@@ -459,7 +458,7 @@ def fetch_transect(  # noqa: PLR0913
     try:
         coord_a = GeoCoordinate.from_decimal(lat_start, lon_start)
         coord_b = GeoCoordinate.from_decimal(lat_end, lon_end)
-        client = PowerClient(temporal_api=resolution)
+        client = PowerClient(temporal_api=cast(Literal["daily", "hourly"], resolution))
         df = client.get_transect_data_from_coordinates(
             coord_a=coord_a,
             coord_b=coord_b,
@@ -472,7 +471,7 @@ def fetch_transect(  # noqa: PLR0913
         )
     except Exception as e:
         console.print(f"[bold red]Error fetching transect data:[/bold red] {e}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
     if df.empty:
         console.print(
@@ -562,10 +561,10 @@ def fetch_regional(  # noqa: PLR0913
         )
     except ValueError as e:
         console.print(f"[bold red]❌ Validation Error:[/bold red] {e}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
     except Exception as e:
         console.print(f"[bold red]Error fetching regional data:[/bold red] {e}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
     if df.empty:
         console.print(
@@ -651,7 +650,7 @@ def cache_info():
     console.print(f"[bold]Cache Path:[/bold] {db_path.resolve()}")
     env_override = __import__("os").environ.get("AIDWEATHER_CACHE_DIR")
     if env_override:
-        console.print(f"[bold]Path Source:[/bold] AIDWEATHER_CACHE_DIR env var")
+        console.print("[bold]Path Source:[/bold] AIDWEATHER_CACHE_DIR env var")
     else:
         console.print(
             "[bold]Path Override:[/bold] set AIDWEATHER_CACHE_DIR to use a custom location"
@@ -661,7 +660,7 @@ def cache_info():
         return
 
     if not db_path.exists():
-        console.print(f"[bold]Cache Status:[/bold] Empty — no database found yet.")
+        console.print("[bold]Cache Status:[/bold] Empty — no database found yet.")
         return
 
     size_bytes = db_path.stat().st_size
@@ -720,7 +719,7 @@ def cache_clear(
         console.print("[bold green]✅ Cache cleared successfully.[/bold green]")
     except Exception as e:
         console.print(f"[bold red]❌ Error clearing cache:[/bold red] {e}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 if __name__ == "__main__":

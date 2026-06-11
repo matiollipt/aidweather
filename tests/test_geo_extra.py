@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import pytest
+
 from aidweather.geo import (
     GeoCoordinate,
     _validate_lat_lon,

@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 import re
 from unittest.mock import patch
+
 import pandas as pd
-from aidweather.cli import app
 from typer.testing import CliRunner
+
+from aidweather.cli import app
 
 
 def strip_ansi(text: str) -> str:

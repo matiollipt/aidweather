@@ -2,7 +2,9 @@
 from unittest.mock import patch
 
 import pytest
+
 from aidweather.client import PowerClient
+from aidweather.geo import GeoCoordinate
 
 
 def test_hourly_point_limit():
@@ -185,3 +187,95 @@ def test_regional_bbox_valid():
     assert payload["longitude-max"] == -44.0
     assert payload["parameters"] == "T2M"
     assert "lonlat" not in payload  # Old field must not be present
+
+
+def test_date_range_validation():
+    """Verify start > end raises ValueError across different query methods."""
+    client = PowerClient(temporal_api="daily")
+    client.cache_cfg["enabled"] = False
+
+    # point
+    with pytest.raises(ValueError, match="start date must be before or equal to end date"):
+        client.get_point_data_from_coordinate(
+            coord=GeoCoordinate.from_decimal(0, 0),
+            start="20230102",
+            end="20230101",
+            params=["T2M"],
+        )
+
+    # multi-point
+    with pytest.raises(ValueError, match="start date must be before or equal to end date"):
+        client.get_multi_point_data(
+            points=[{"lat": 0, "lon": 0}],
+            start="20230102",
+            end="20230101",
+            params=["T2M"],
+        )
+
+    # regional
+    with pytest.raises(ValueError, match="start date must be before or equal to end date"):
+        client.get_regional_data(
+            lat_min=0,
+            lat_max=1,
+            lon_min=0,
+            lon_max=1,
+            start="20230102",
+            end="20230101",
+            params=["T2M"],
+        )
+
+    # transect
+    with pytest.raises(ValueError, match="start date must be before or equal to end date"):
+        client.get_transect_data_from_coordinates(
+            coord_a=GeoCoordinate.from_decimal(0, 0),
+            coord_b=GeoCoordinate.from_decimal(1, 1),
+            start="20230102",
+            end="20230101",
+            params=["T2M"],
+            num_points=3,
+        )
+
+
+def test_unknown_parameter_warning():
+    """Verify that using an unknown parameter raises a warning but doesn't block the request."""
+    client = PowerClient(temporal_api="daily")
+    client.cache_cfg["enabled"] = False
+
+    # We mock self.session.get to avoid actually hitting the API or requiring mocks for everything
+    with patch.object(client.session, "get") as mock_get:
+        # Mock a minimal response
+        from unittest.mock import Mock
+        mock_resp = Mock()
+        mock_resp.content = b"{}"
+        mock_resp.json.return_value = {}
+        mock_get.return_value = mock_resp
+
+        # Warns on unknown params
+        with pytest.warns(UserWarning, match="Unknown parameter.*INVALID_PARAM"):
+            try:
+                client.get_point_data_from_coordinate(
+                    coord=GeoCoordinate.from_decimal(0, 0),
+                    start="20230101",
+                    end="20230101",
+                    params=["INVALID_PARAM"],
+                )
+            except Exception:
+                # We don't care if it fails on JSON parsing, we just want to verify the warning
+                pass
+
+        # Does not warn on valid parameter
+        import warnings
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            try:
+                client.get_point_data_from_coordinate(
+                    coord=GeoCoordinate.from_decimal(0, 0),
+                    start="20230101",
+                    end="20230101",
+                    params=["T2M"],
+                )
+            except Exception:
+                pass
+        # Assert no warnings were issued
+        user_warnings = [w for w in record if issubclass(w.category, UserWarning)]
+        assert len(user_warnings) == 0

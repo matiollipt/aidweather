@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import pandas as pd
 import pytest
+
 from aidweather.client import PowerClient
 
 # A sample JSON response mimicking the NASA POWER daily API for a single point

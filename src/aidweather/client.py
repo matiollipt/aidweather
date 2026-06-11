@@ -1,6 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
-
 """
 aidweather
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -35,6 +33,7 @@ Example:
     ... )
     >>> print(weather_data.head())
 """
+from __future__ import annotations
 
 import gzip
 import hashlib
@@ -44,6 +43,7 @@ import os
 import sqlite3
 import threading
 import time
+import warnings
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
@@ -52,8 +52,6 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 import requests
-from aidweather.config import cfg
-from aidweather.geo import GeoCoordinate
 from pydantic import BaseModel, ConfigDict
 from requests.adapters import HTTPAdapter
 from rich.console import Console
@@ -62,6 +60,8 @@ from rich.table import Table
 from urllib3.util.retry import Retry
 
 from aidweather import __version__
+from aidweather.config import cfg
+from aidweather.geo import GeoCoordinate
 
 
 class RateLimiter:
@@ -175,6 +175,25 @@ def _format_bytes(size: float) -> str:
     return f"{size:.2f} TiB"
 
 
+def _safe_payload_repr(payload: Any) -> str:
+    """Creates a safe, compact string representation of a request payload.
+
+    Tolerates non-JSON-serializable values and falls back to repr if needed.
+    """
+    if not isinstance(payload, dict):
+        return repr(payload)
+    try:
+        # Copy the payload to avoid modifying the original
+        clean_payload = dict(payload)
+        # Redact or truncate long values if any (e.g. if parameters is extremely long)
+        for k, v in clean_payload.items():
+            if isinstance(v, str) and len(v) > 200:
+                clean_payload[k] = v[:197] + "..."
+        return json.dumps(clean_payload, sort_keys=True, default=str)
+    except Exception:
+        return repr(payload)
+
+
 def _to_naive(ts: pd.Timestamp) -> pd.Timestamp:
     """Strip timezone info from a Timestamp, safe for already tz-naive values."""
     return ts.tz_localize(None) if ts.tzinfo is not None else ts
@@ -249,8 +268,8 @@ def _fetch_and_parse(
     session: requests.Session,
     url: str,
     payload: dict[str, Any],
-    temporal_api: str,
-) -> tuple[pd.DataFrame, int, dict[str, str]]:
+    temporal_api: Literal["daily", "hourly"],
+) -> tuple[pd.DataFrame, int]:
     """Performs a single API request and parses the JSON response into a DataFrame.
 
     Returns:
@@ -546,6 +565,17 @@ class PowerClient:
         session: The session object used for making HTTP requests.
         db_conn: The connection to the SQLite cache database, if caching is enabled.
     """
+    temporal_api: Literal["daily", "hourly"]
+    base_url: str
+    regional_base_url: str
+    params_desc: dict[str, str]
+    session: requests.Session
+    db_conn: sqlite3.Connection | None
+    cache_cfg: dict[str, Any]
+    api_limits: dict[str, Any]
+    max_workers_limit: int
+    rate_limiter: RateLimiter
+    _metrics: dict[str, Any]
 
     def __init__(
         self,
@@ -626,6 +656,29 @@ class PowerClient:
             logger.error(f"Failed to initialize cache database at {db_path}: {e}")
             self.db_conn = None
 
+    def _validate_inputs(
+        self,
+        params: list[str],
+        start: Any,
+        end: Any,
+    ) -> None:
+        """Validates query inputs (parameters and date ranges)."""
+        # Validate parameters
+        known_params = set(cfg.params("all").keys())
+        unknown = [p for p in params if p not in known_params]
+        if unknown:
+            warnings.warn(
+                f"Unknown parameter(s): {', '.join(unknown)}. These might not be supported by NASA POWER.",
+                UserWarning,
+                stacklevel=3,
+            )
+
+        # Validate date range
+        start_dt = pd.to_datetime(start)
+        end_dt = pd.to_datetime(end)
+        if start_dt > end_dt:
+            raise ValueError("start date must be before or equal to end date")
+
     def _read_from_cache_db(self, key: str) -> pd.DataFrame | None:
         """Loads and decompresses a response from the SQLite cache.
 
@@ -689,7 +742,7 @@ class PowerClient:
         except (sqlite3.Error, TypeError) as e:
             logger.warning(f"Could not write to cache for key {key}: {e}")
 
-    def _format_date(self, date_str: str | datetime) -> str:
+    def _format_date(self, date_str: Any) -> str:
         """Formats a date into the required API string format.
 
         Args:
@@ -733,8 +786,8 @@ class PowerClient:
     def _build_point_payload(  # noqa: PLR0913
         self,
         params: list[str],
-        start: str,
-        end: str,
+        start: datetime | str | timedelta | pd.Timestamp,
+        end: datetime | str | timedelta | pd.Timestamp,
         lon: float,
         lat: float,
         elevation: float | None = None,
@@ -781,8 +834,8 @@ class PowerClient:
     def _build_regional_payload(
         self,
         params: list[str],
-        start: str,
-        end: str,
+        start: datetime | str | timedelta | pd.Timestamp,
+        end: datetime | str | timedelta | pd.Timestamp,
         lat_min: float,
         lat_max: float,
         lon_min: float,
@@ -859,7 +912,7 @@ class PowerClient:
         Returns:
             A list of DataFrames, one for each successfully fetched date range.
         """
-        newly_fetched_dfs = []
+        newly_fetched_dfs: list[pd.DataFrame] = []
         if not ranges:
             return newly_fetched_dfs
 
@@ -1002,12 +1055,13 @@ class PowerClient:
     def get_point_data_from_coordinate(  # noqa: PLR0913
         self,
         coord: GeoCoordinate,
-        start: str,
-        end: str,
+        start: datetime | str | timedelta | pd.Timestamp,
+        end: datetime | str | timedelta | pd.Timestamp,
         params: list[str],
         elevation: float | None = None,
         wind_elevation: float | None = None,
         wind_surface: float | None = None,
+        _validate: bool = True,
     ) -> pd.DataFrame:
         """Fetches data for a single point using a `GeoCoordinate` object.
 
@@ -1019,10 +1073,14 @@ class PowerClient:
             elevation: The elevation of the site in meters.
             wind_elevation: The wind elevation in meters (10 to 300).
             wind_surface: The wind surface parameter.
+            _validate: Whether to validate inputs.
 
         Returns:
             A DataFrame containing the time-series data, indexed by date.
         """
+        if _validate:
+            self._validate_inputs(params, start, end)
+
         if not params:
             raise ValueError("No parameters provided")
 
@@ -1082,8 +1140,8 @@ class PowerClient:
         self,
         executor: ThreadPoolExecutor,
         parsed_points: list,
-        start: str,
-        end: str,
+        start: datetime | str | timedelta | pd.Timestamp,
+        end: datetime | str | timedelta | pd.Timestamp,
         params: list[str],
     ) -> dict:
         """Submits one Future per point and returns future→point mapping."""
@@ -1109,6 +1167,7 @@ class PowerClient:
                 elevation=elevation,
                 wind_elevation=wind_elevation,
                 wind_surface=wind_surface,
+                _validate=False,
             )
             future_to_point[future] = point
         return future_to_point
@@ -1154,10 +1213,11 @@ class PowerClient:
             list[dict[str, Any] | tuple[float, float] | tuple[float, float, float]]
             | pd.DataFrame
         ),
-        start: str,
-        end: str,
+        start: datetime | str | timedelta | pd.Timestamp,
+        end: datetime | str | timedelta | pd.Timestamp,
         params: list[str],
         max_workers: int = 5,
+        _validate: bool = True,
     ) -> tuple[
         pd.DataFrame,
         list[dict[str, Any] | tuple[float, float] | tuple[float, float, float]],
@@ -1171,10 +1231,14 @@ class PowerClient:
             end: The end date for the data query.
             params: A list of POWER API parameters to fetch.
             max_workers: The maximum number of concurrent threads to use.
+            _validate: Whether to validate inputs.
 
         Returns:
             A tuple containing (combined DataFrame, list of failed points).
         """
+        if _validate:
+            self._validate_inputs(params, start, end)
+
         parsed_points = self._parse_points_input(points)
 
         limit = getattr(self, "max_workers_limit", 5)
@@ -1351,10 +1415,11 @@ class PowerClient:
         lat_max: float,
         lon_min: float,
         lon_max: float,
-        start: str,
-        end: str,
+        start: datetime | str | timedelta | pd.Timestamp,
+        end: datetime | str | timedelta | pd.Timestamp,
         params: list[str],
-        request: "RegionalRequest | None" = None,
+        request: RegionalRequest | None = None,
+        _validate: bool = True,
     ) -> pd.DataFrame:
         """Fetches data for a geographic bounding box using the regional API.
 
@@ -1372,6 +1437,7 @@ class PowerClient:
             params: A list containing **one** POWER API parameter.
             request: Optional ``RegionalRequest`` object. If provided, its
                 fields override the positional arguments.
+            _validate: Whether to validate inputs.
 
         Returns:
             A DataFrame with ``lat``, ``lon``, ``elevation`` (when available),
@@ -1389,6 +1455,9 @@ class PowerClient:
             start = request.start
             end = request.end
             params = request.params
+
+        if _validate:
+            self._validate_inputs(params, start, end)
 
         payload = self._build_regional_payload(
             params=params,
@@ -1525,6 +1594,7 @@ class PowerClient:
     def get_transect_data(
         self,
         request: TransectRequest | None = None,
+        _validate: bool = True,
         **kwargs,
     ) -> pd.DataFrame:
         """Generates a 1D transect of points and fetches data for them in parallel.
@@ -1538,6 +1608,7 @@ class PowerClient:
         Args:
             request: A :class:`TransectRequest` configuration object. When
                 omitted, one is constructed from the keyword arguments.
+            _validate: Whether to validate inputs.
             **kwargs: Keyword arguments forwarded to :class:`TransectRequest`.
 
         Returns:
@@ -1551,6 +1622,9 @@ class PowerClient:
         """
         if request is None:
             request = TransectRequest(**kwargs)
+
+        if _validate:
+            self._validate_inputs(request.params, request.start, request.end)
 
         n = self._resolve_transect_num_points(
             request.start_coord,
@@ -1580,7 +1654,7 @@ class PowerClient:
 
         points_with_metadata: list[dict[str, Any]] = [
             {"lat": round(p_lat, 4), "lon": round(p_lon, 4), "name": f"Point_{i + 1}"}
-            for i, (p_lat, p_lon) in enumerate(zip(lats, lons))
+            for i, (p_lat, p_lon) in enumerate(zip(lats, lons, strict=True))
         ]
 
         df, failed_points = self.get_multi_point_data(
@@ -1589,6 +1663,7 @@ class PowerClient:
             end=request.end,
             params=request.params,
             max_workers=max_workers,
+            _validate=False,
         )
 
         if df.empty and failed_points:

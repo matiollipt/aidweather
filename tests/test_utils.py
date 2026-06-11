@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import pandas as pd
 import pytest
+
 from aidweather.utils import ensure_date_column
 
 

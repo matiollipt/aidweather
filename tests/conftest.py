@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-import pytest
 from unittest.mock import patch
+
+import pytest
+
 from aidweather.client import PowerClient
 
 

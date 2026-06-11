@@ -2,6 +2,7 @@
 # tests/test_geo.py
 
 import pytest
+
 from aidweather.geo import (
     GeoCoordinate,
     _normalize_coord_string,

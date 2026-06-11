@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-import pandas as pd
-import numpy as np
-import pytest
 from unittest.mock import patch
+
+import pandas as pd
+import pytest
+
+from aidweather.client import PowerClient
 from aidweather.geo import GeoCoordinate
-from aidweather.client import PowerClient, TransectRequest
 
 SAMPLE_POINT_RESPONSE = {
     "header": {
@@ -279,3 +280,37 @@ def test_summarize_console_logging(capsys):
     assert "Performance" in captured.out
     assert "Efficiency" in captured.out
     assert "API Connection" in captured.out
+
+
+def test_regional_request_failure_logging(mock_session):
+    """Verify that when a regional request fails, it logs using _safe_payload_repr without raising NameError."""
+    # Register an error status code to trigger RequestException
+    mock_session.get(
+        "https://power.larc.nasa.gov/api/temporal/daily/regional",
+        status_code=500,
+    )
+    client = PowerClient()
+    client.cache_cfg["enabled"] = False
+
+    with patch("aidweather.client.logger") as mock_logger:
+        with pytest.raises(OSError, match="Regional API request failed"):
+            client.get_regional_data(
+                lat_min=20.0,
+                lat_max=21.0,
+                lon_min=10.0,
+                lon_max=11.0,
+                start="2023-01-01",
+                end="2023-01-02",
+                params=["T2M"],
+            )
+
+        # Verify that logger.error was called and did not raise NameError
+        mock_logger.error.assert_called()
+        # Find the log call that contains "Regional API request failed for payload"
+        failed_log_found = False
+        for call in mock_logger.error.call_args_list:
+            if "Regional API request failed for payload" in call[0][0]:
+                failed_log_found = True
+                # Payload should be serialized as JSON/compact string representation
+                assert '"parameters": "T2M"' in call[0][0] or "'parameters': 'T2M'" in call[0][0]
+        assert failed_log_found, "Could not find payload representation log message"
