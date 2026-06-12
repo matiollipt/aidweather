@@ -34,13 +34,58 @@ Example:
 curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash -s -- --dev -y
 ```
 
+#### Install system-wide via `uv tool`
+
+To install system-wide in an isolated environment using `uv tool`:
+
+```bash
+# Via curl installation script:
+curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash -s -- --uv-tool -y
+
+# Or directly using uv:
+uv tool install git+https://github.com/matiollipt/aidweather.git
+```
+
+### Quick Install (Windows PowerShell)
+
+```powershell
+# Default install in .venv:
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/matiollipt/aidweather/main/install.ps1))) -Yes
+
+# Install with developer tools:
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/matiollipt/aidweather/main/install.ps1))) -Dev -Yes
+
+# Install system-wide as a uv tool:
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/matiollipt/aidweather/main/install.ps1))) -UvTool -Yes
+```
+
+Optional parameters:
+
+| Parameter | Description |
+|---|---|
+| `-Dev` | Also install developer tools |
+| `-UvTool` | Install globally in an isolated environment via uv tool |
+| `-NoVenv` | Skip venv creation (use active/global Python) |
+| `-VenvPath DIR` | Custom venv path (default: `.venv`) |
+| `-Clean` | Wipe and recreate venv before installing |
+| `-Yes` | Skip confirmation prompts |
+
 ### Local Development
 
+#### Unix/macOS
 ```bash
 git clone https://github.com/matiollipt/aidweather.git
 cd aidweather
 ./install.sh --dev
 ```
+
+#### Windows (PowerShell)
+```powershell
+git clone https://github.com/matiollipt/aidweather.git
+cd aidweather
+.\install.ps1 -Dev
+```
+
 
 Run the test suite:
 
