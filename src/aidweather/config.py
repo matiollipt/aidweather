@@ -22,7 +22,7 @@ from collections.abc import Mapping
 from importlib import resources
 from typing import Any
 
-from platformdirs import user_cache_dir
+from platformdirs import user_cache_dir, user_log_dir
 
 # Hardcoded defaults — used only if config.json is absent or unreadable
 _DEFAULT_URLS = {
@@ -157,13 +157,38 @@ class _Config:
         return {**defaults, **json_overrides}
 
     def logging_config(self) -> dict[str, Any]:
-        """Get the log configuration settings."""
+        """Get the log configuration settings.
+
+        Returns:
+            dict: Config including filename (resolved to absolute path).
+        """
+        raw_config = self.get("logging_config", default={})
+        filename = raw_config.get("filename", "aidweather.log")
+
+        if os.path.isabs(filename):
+            resolved_path = filename
+        else:
+            env_override = os.environ.get("AIDWEATHER_LOG_DIR")
+            json_path = raw_config.get("path")
+
+            if env_override:
+                log_dir = env_override
+            elif json_path:
+                log_dir = os.path.abspath(json_path)
+            else:
+                log_dir = user_log_dir("aidweather", appauthor=False)
+
+            resolved_path = os.path.join(log_dir, filename)
+
         defaults: dict[str, Any] = {
             "enabled": False,
-            "filename": "aidweather.log",
+            "filename": resolved_path,
             "level": "INFO",
         }
-        return {**defaults, **self.get("logging_config", default={})}
+        json_overrides = {
+            k: v for k, v in raw_config.items() if k not in ("filename", "path")
+        }
+        return {**defaults, **json_overrides}
 
     def api_limits(self) -> dict[str, Any]:
         """Get the configuration for API limits."""

@@ -35,6 +35,28 @@ Priority order when resolving the path:
 
 ---
 
+## Log file path
+
+By default, log files are stored in a platform-appropriate directory resolved using Python's standard `platformdirs` library:
+
+| Platform | Default path |
+|---|---|
+| Linux | `~/.local/state/aidweather/log/aidweather.log` |
+| macOS | `~/Library/Logs/aidweather/aidweather.log` |
+| Windows | `%USERPROFILE%\AppData\Local\aidweather\Logs\aidweather.log` |
+
+### Overriding the log file location
+
+Priority order when resolving the log path:
+1. `AIDWEATHER_LOG_DIR` environment variable (if the filename is relative).
+2. A `path` key under `logging_config` in `config.json` or programmatically set via `cfg.set("logging_config.path", "/custom/log/dir")` (if the filename is relative).
+3. Platform default (see table above, if the filename is relative).
+
+*Note: If `logging_config.filename` is set to an absolute path, it will be used directly as-is, ignoring the above directories.*
+
+
+---
+
 ## Accessing config values in code
 
 The singleton `cfg` object provides dot-notation access to all settings, and allows programmatically overriding values at runtime:
@@ -73,5 +95,5 @@ log = cfg.logging_config()
 | `param_descriptions` | Full agronomic descriptions per parameter code |
 | `api_limits` | API limits (max parameters, max workers, rate limit calls & period) |
 | `cache_config` | Caching settings (`enabled` flag, optional `path`) |
-| `logging_config` | File log settings (`filename`, `level`) |
+| `logging_config` | File log settings (`filename`, `level`, and optional `path`) |
 

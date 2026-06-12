@@ -15,4 +15,4 @@ The central configuration file. Loaded by `aidweather.config` and accessible via
 - **`param_descriptions`** — Full agronomic descriptions for each parameter, including data source, resolution, and agricultural relevance.
 - **`api_limits`** — Max parameters per request type (used for validation before requests are sent).
 - **`cache_config`** — `enabled` flag. The cache path itself is resolved by Python using `platformdirs` and the `AIDWEATHER_CACHE_DIR` env var — it is not stored here.
-- **`logging_config`** — File logging settings (`filename`, `level`).
+- **`logging_config`** — File logging settings (`filename`, `level`, and optional `path`).

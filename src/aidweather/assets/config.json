@@ -69,6 +69,7 @@
     "logging_config": {
         "enabled": true,
         "filename": "aidweather.log",
+        "path": null,
         "level": "INFO"
     }
 }

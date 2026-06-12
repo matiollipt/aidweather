@@ -19,6 +19,8 @@
 # | 4 · Caching | See how the cache speeds up repeated queries |
 # | 5 · Multi-point | Fetch data for several locations in parallel |
 # | 6 · Data cleanup | Standardise the date column in any DataFrame |
+# | 7 · Logging | Configure and enable logging to a local log file |
+
 
 # %%
 import time
@@ -366,7 +368,60 @@ print(clean_b)
 
 # %% [markdown]
 # ---
+# ## 7 · Logging
+#
+# `aidweather` logs internal operations (such as HTTP requests, cache hits/misses,
+# rate limits, etc.) using Python's standard `logging` library.
+# By default, a `NullHandler` is attached to prevent unwanted warning messages.
+# You can check the default logging configuration, override directories, and
+# easily enable logging to a file.
+
+# %%
+import logging
+
+# Retrieve the resolved log configurations
+log_cfg = config.logging_config()
+print("Logging enabled in config :", log_cfg.get("enabled"))
+print("Log file destination      :", log_cfg.get("filename"))
+print("Log level                 :", log_cfg.get("level"))
+
+# To enable file logging, configure Python's logger using config values
+log_path = Path(log_cfg.get("filename"))
+log_path.parent.mkdir(parents=True, exist_ok=True)
+
+logging.basicConfig(
+    filename=str(log_path),
+    level=getattr(logging, log_cfg.get("level", "INFO")),
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    force=True,  # Reset standard logging config if already set in notebook
+)
+
+# Fetching some data to trigger log messages
+print("\nFetching data to trigger log entries...")
+df_log = client.get_point_data(
+    lat=lat,
+    lon=lon,
+    start="2023-01-01",
+    end="2023-01-02",
+    params=["T2M"],
+)
+
+# Show that the log file has been created and populated
+log_path = Path(log_cfg.get("filename"))
+if log_path.exists():
+    print(f"Log file created at: {log_path}")
+    print("\nLast 3 lines of the log file:")
+    with open(log_path, "r") as f:
+        lines = f.readlines()
+        for line in lines[-3:]:
+            print("  " + line.strip())
+else:
+    print(f"Log file not found at: {log_path}")
+
+# %% [markdown]
+# ---
 # ## Summary
+
 #
 # | Component | What it does |
 # |-----------|--------------|
