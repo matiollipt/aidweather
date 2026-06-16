@@ -23,6 +23,7 @@
 
 
 # %%
+import logging
 import time
 from pathlib import Path
 
@@ -34,6 +35,24 @@ from aidweather import (
     ensure_date_column,
     get_config,
     normalize_coord_input,
+)
+
+# Configure logging using built-in configuration settings
+log_cfg = get_config().logging_config()
+log_handlers = [logging.StreamHandler()]  # Console logger is always active
+
+if log_cfg.get("enabled", False):
+    log_file = log_cfg.get("filename")
+    if log_file:
+        log_file_path = Path(log_file)
+        log_file_path.parent.mkdir(parents=True, exist_ok=True)
+        log_handlers.append(logging.FileHandler(log_file_path))
+
+logging.basicConfig(
+    level=getattr(logging, log_cfg.get("level", "INFO")),
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=log_handlers,
+    force=True,
 )
 
 print("aidweather ready.")
@@ -377,24 +396,11 @@ print(clean_b)
 # easily enable logging to a file.
 
 # %%
-import logging
-
 # Retrieve the resolved log configurations
 log_cfg = config.logging_config()
 print("Logging enabled in config :", log_cfg.get("enabled"))
 print("Log file destination      :", log_cfg.get("filename"))
 print("Log level                 :", log_cfg.get("level"))
-
-# To enable file logging, configure Python's logger using config values
-log_path = Path(log_cfg.get("filename"))
-log_path.parent.mkdir(parents=True, exist_ok=True)
-
-logging.basicConfig(
-    filename=str(log_path),
-    level=getattr(logging, log_cfg.get("level", "INFO")),
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    force=True,  # Reset standard logging config if already set in notebook
-)
 
 # Fetching some data to trigger log messages
 print("\nFetching data to trigger log entries...")
@@ -409,7 +415,7 @@ df_log = client.get_point_data(
 # Show that the log file has been created and populated
 log_path = Path(log_cfg.get("filename"))
 if log_path.exists():
-    print(f"Log file created at: {log_path}")
+    print(f"Log file created/updated at: {log_path}")
     print("\nLast 3 lines of the log file:")
     with open(log_path, "r") as f:
         lines = f.readlines()

@@ -225,3 +225,14 @@ def test_risk_screening_scores():
     
     # Manaus should be the highest flooding score due to positive heavy rainfall trends
     assert am_row["flooding_pressure_score"] > df_row["flooding_pressure_score"]
+
+
+def test_plotting_script_imports():
+    """Verify that the plotting script can be loaded without errors."""
+    plot_script_path = Path(__file__).parent / "brazil_capitals_climate_risk_plots.py"
+    assert plot_script_path.exists()
+    spec = importlib.util.spec_from_file_location("bcr_plots", str(plot_script_path))
+    bcr_plots = importlib.util.module_from_spec(spec)
+    # Executing the module runs main blocks when __name__ == "__main__",
+    # but since it's imported/executed as bcr_plots, IS_MAIN is False.
+    spec.loader.exec_module(bcr_plots)

@@ -16,13 +16,35 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from aidweather import PowerClient
+from aidweather import PowerClient, get_config
 
-# Configure logging
+# Configure logging using built-in configuration settings
+log_cfg = get_config().logging_config()
+log_handlers = [logging.StreamHandler()]  # Console logger is always active
+
+if log_cfg.get("enabled", False):
+    log_file = log_cfg.get("filename")
+    if log_file:
+        log_file_path = Path(log_file)
+        log_file_path.parent.mkdir(parents=True, exist_ok=True)
+        log_handlers.append(logging.FileHandler(log_file_path))
+
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    level=getattr(logging, log_cfg.get("level", "INFO")),
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=log_handlers,
+    force=True,
 )
 logger = logging.getLogger("brazil_capitals_risk")
+
+# Detect if running in a notebook (no __file__) or as the main script to avoid __file__ NameError
+if "__file__" in globals():
+    script_dir = Path(__file__).resolve().parent
+    IS_MAIN = __name__ == "__main__"
+else:
+    script_dir = Path.cwd()
+    IS_MAIN = True
+
 
 # Attempt scipy import for trend computation
 try:
@@ -59,9 +81,8 @@ PARAMS = [
 # The table contains the `state_code`, `state`, `capital`, `region`, `lat`, and `lon` for each location.
 
 # %%
-if __name__ == "__main__":
+if IS_MAIN:
     # Read state capitals metadata
-    script_dir = Path(__file__).resolve().parent
     capitals_path = script_dir / "data" / "brazil_state_capitals.csv"
 
     capitals_df = pd.read_csv(capitals_path)
@@ -76,7 +97,7 @@ if __name__ == "__main__":
 # We will fetch data from 1981-01-01 to near real-time for all 27 capitals.
 
 # %%
-if __name__ == "__main__":
+if IS_MAIN:
     start_date = "1981-01-01"
     end_date = (date.today() - timedelta(days=5)).isoformat()
 
@@ -140,26 +161,32 @@ if __name__ == "__main__":
 # ## 3. Scientific Methodology & Calculations
 #
 # ### Daily Vapor Pressure Deficit (VPD)
-# Vapor Pressure Deficit (VPD, in kPa) is a key agroclimatic parameter that indicates the drying capacity of the air. It is calculated daily using the Tetens formula:
+# Vapor Pressure Deficit (VPD, in kPa) is a key agroclimatic parameter that indicates the drying capacity of the air. Mathematically, it represents the difference between the amount of moisture the air can hold when saturated and the actual amount of moisture present.
 #
-# 1. **Saturation Vapor Pressure ($e_s$, in kPa)** as a function of air temperature ($T$ in °C):
+# Unlike Relative Humidity (RH), which is a relative ratio dependent on temperature, VPD is an absolute measure of atmospheric moisture deficit that directly correlates with crop transpiration rates and water stress. As temperature rises, saturation vapor pressure increases exponentially, meaning that even at a constant RH, plants experience a much higher moisture draw under warmer temperatures.
+#
+# The daily VPD is calculated using the Tetens formula:
+#
+# 1. **Saturation Vapor Pressure ($e_s$, in kPa)** as a function of daily mean air temperature ($T$ in °C):
 #    $$e_s(T) = 0.61078 \times \exp\left(\frac{17.27 \times T}{T + 237.3}\right)$$
-# 2. **Actual Vapor Pressure ($e_a$, in kPa)** as a function of relative humidity ($RH$ in %):
+# 2. **Actual Vapor Pressure ($e_a$, in kPa)** incorporating the daily relative humidity ($RH$ in %):
 #    $$e_a = e_s(T) \times \frac{RH}{100}$$
 # 3. **Vapor Pressure Deficit (VPD, in kPa)**:
 #    $$VPD = e_s(T) - e_a = e_s(T) \times \left(1 - \frac{RH}{100}\right)$$
 #
 # ### Annual Precipitation Metrics
-# To screen for drought and deluge hazards, the script compiles:
-# - **`annual_precip_mm`**: The sum of daily corrected precipitation.
-# - **`rainy_days_ge_1mm`**: Count of days with daily precipitation $\ge 1.0\text{ mm}$.
-# - **`heavy_rain_days_ge_20mm`**: Count of days with daily precipitation $\ge 20.0\text{ mm}$.
-# - **`extreme_rain_days_ge_50mm`**: Count of days with daily precipitation $\ge 50.0\text{ mm}$.
+# Total annual precipitation is a common metric, but it does not capture rain distribution or intensity. To screen for drought and deluge hazards, the script compiles:
+# - **`annual_precip_mm`**: The sum of daily corrected precipitation, reflecting the total annual water input.
+# - **`rainy_days_ge_1mm`**: Count of days with daily precipitation $\ge 1.0\text{ mm}$ (agronomic wet days).
+# - **`heavy_rain_days_ge_20mm`**: Count of days with daily precipitation $\ge 20.0\text{ mm}$ (associated with urban drainage pressure).
+# - **`extreme_rain_days_ge_50mm`**: Count of days with daily precipitation $\ge 50.0\text{ mm}$ (indicative of acute flooding events).
 # - **`dry_days_lt_1mm`**: Count of days with daily precipitation $< 1.0\text{ mm}$.
-# - **`longest_dry_spell_days`**: The maximum number of consecutive days with daily precipitation $< 1.0\text{ mm}$ within the calendar year.
-# - **`max_1day_precip_mm`**: Maximum daily precipitation amount observed.
-# - **`max_5day_precip_mm`**: Maximum 5-day rolling sum of daily precipitation.
-# - **`rainfall_concentration`**: Ratio of maximum 5-day rainfall to total annual rainfall.
+# - **`longest_dry_spell_days`**: The maximum number of consecutive days with daily precipitation $< 1.0\text{ mm}$ within the calendar year. A prolonged dry spell depletes root-zone soil moisture and indicates seasonal agronomic drought risk, which can severely impact crop yields even if the total annual rainfall is high.
+# - **`max_1day_precip_mm`**: Maximum daily precipitation amount observed, showing single-day deluge magnitude.
+# - **`max_5day_precip_mm`**: Maximum 5-day rolling sum of daily precipitation, which captures cumulative deluge events that saturate soils and trigger flooding or landslides.
+# - **`rainfall_concentration`**: Ratio of maximum 5-day rainfall to total annual rainfall:
+#   $$\text{rainfall\_concentration} = \frac{\max\text{ 5-day rainfall}}{\text{annual rainfall}}$$
+#   A high ratio indicates that a significant fraction of the annual precipitation falls in a very short window, signifying high runoff, erosion risk, and deluge-prone environments.
 
 
 # %%
@@ -276,7 +303,7 @@ def compute_annual_metrics(daily_df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(records)
 
 
-if __name__ == "__main__":
+if IS_MAIN:
     print("\nComputing annual metrics...")
     annual_df = compute_annual_metrics(daily_df)
 
@@ -296,9 +323,19 @@ if __name__ == "__main__":
 # %% [markdown]
 # ## 4. Long-Term Trend Fitting
 #
-# For each capital and annual metric, we calculate a linear slope over the years (from 1981 onward).
-# - **Theil-Sen Estimator**: A non-parametric estimator that computes the median of all slopes between pairs of points. It is highly robust to outliers.
-# - **OLS Linear Regression**: Falls back to standard Ordinary Least Squares if scipy is unavailable.
+# To understand climate dynamics over the 1981–present period, we calculate the rate of change (slope) for each annual metric. We evaluate trends using two methods depending on library availability:
+#
+# - **Theil-Sen Estimator (Robust Non-Parametric)**:
+#   When `scipy` is available, we use the Theil-Sen estimator (`scipy.stats.theilslopes`). Ordinary Least Squares (OLS) is highly sensitive to single-year extreme weather anomalies (such as an exceptionally dry El Niño year or a wet La Niña year), which can artificially skew the calculated slope.
+#   
+#   Theil-Sen resolves this by calculating the slopes between all possible pairs of data points:
+#   $$S_{i,j} = \frac{Y_j - Y_i}{X_j - X_i} \quad \text{for } 1 \le i < j \le N$$
+#   The final trend slope is the **median** of all these pairwise slopes. It is robust to outliers, boasting a breakdown point of approximately $29.3\%$, meaning it remains highly accurate even if nearly a third of the data points are extreme anomalies.
+#
+# - **Ordinary Least Squares (OLS) Regression**:
+#   If `scipy` is not installed, the script falls back to standard OLS (`numpy.polyfit`). OLS fits a line that minimizes the sum of squared differences between observed values and the regression line:
+#   $$\min \sum_{i=1}^N (Y_i - (\beta X_i + \alpha))^2$$
+#   This fallback ensures execution is successful in lightweight Python environments.
 
 
 # %%
@@ -392,7 +429,7 @@ def compute_trends_dataframe(annual_df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(records)
 
 
-if __name__ == "__main__":
+if IS_MAIN:
     print("\nComputing trend metrics for all indicators...")
     trends_df = compute_trends_dataframe(annual_df)
 
@@ -405,15 +442,27 @@ if __name__ == "__main__":
 # %% [markdown]
 # ## 5. Risk Screening Scores
 #
-# To construct comparative risk indexes, trend slopes are normalized across all capitals using **Z-scores**:
-# $$Z(C, M) = \frac{\text{Slope}(C, M) - \mu_M}{\sigma_M}$$
-# where $\mu_M$ is the average slope of metric $M$ across all capitals, and $\sigma_M$ is the standard deviation.
+# Slopes of different variables have vastly different units (e.g., temperature trends in °C/year vs. precipitation trends in mm/year). To compile these diverse physical metrics into a comparative screening tool, we first standardize the trend slopes of each capital using **Z-scores**:
 #
-# Two auditable indices are computed for each capital:
-# 1. **`desertification_pressure_score`**: Calculates relative pressure toward drying conditions.
+# $$Z(C, M) = \frac{\text{Slope}(C, M) - \mu_M}{\sigma_M}$$
+#
+# where:
+# - $C$ is the specific capital.
+# - $M$ is the annual metric.
+# - $\mu_M$ is the arithmetic mean of the slope of metric $M$ computed across all 27 capitals.
+# - $\sigma_M$ is the population standard deviation of that slope across the capitals.
+#
+# A Z-score indicates how many standard deviations a location's trend deviates from the national average. A positive Z-score shows the warming/drying rate is higher than the national average, whereas a negative Z-score indicates a slower-than-average trend or opposite direction.
+#
+# Two auditable comparative screening indices are then calculated:
+#
+# 1. **`desertification_pressure_score`**: Measures the relative long-term shift toward warmer and drier surface conditions. It sums positive Z-scores of indicators that drive aridity and subtracts Z-scores of indicators that counter it:
 #    $$\text{desertification\_pressure\_score} = Z_{\text{mean\_t2m\_c}} + Z_{\text{mean\_t2m\_max\_c}} + Z_{\text{dry\_days\_lt\_1mm}} + Z_{\text{longest\_dry\_spell\_days}} - Z_{\text{annual\_precip\_mm}} - Z_{\text{mean\_rh2m\_pct}}$$
-# 2. **`flooding_pressure_score`**: Calculates relative pressure toward extreme precipitation/deluge.
+#    A high positive score reveals that a capital is experiencing accelerated warming and dry spell expansion relative to its peers.
+#
+# 2. **`flooding_pressure_score`**: Measures the relative long-term shift toward intense deluge events. It accumulates Z-scores of extreme precipitation indicators:
 #    $$\text{flooding\_pressure\_score} = Z_{\text{heavy\_rain\_days\_ge\_20mm}} + Z_{\text{extreme\_rain\_days\_ge\_50mm}} + Z_{\text{max\_1day\_precip\_mm}} + Z_{\text{max\_5day\_precip\_mm}} + Z_{\text{rainfall\_concentration}}$$
+#    A high positive score shows that the frequency and intensity of extreme rain events are accelerating faster than the national average, showing rising vulnerability to runoff and flash floods.
 
 
 # %%
@@ -498,7 +547,7 @@ def compute_risk_screening_scores(trends_df: pd.DataFrame) -> pd.DataFrame:
     return slopes_df[output_cols]
 
 
-if __name__ == "__main__":
+if IS_MAIN:
     print("\nComputing Climate Risk Screening Scores...")
     scores_df = compute_risk_screening_scores(trends_df)
 
@@ -515,6 +564,20 @@ if __name__ == "__main__":
         ]
     ].sort_values("desertification_pressure_score", ascending=False)
     print(final_output.to_string(index=False))
+
+    # Save results for subsequent visualization in aidviz, upstream to this folder
+    output_dir = script_dir.parent.parent / "outputs" / "brazil_capitals"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    annual_path = output_dir / "annual_metrics.parquet"
+    trends_path = output_dir / "trends.csv"
+    scores_path = output_dir / "risk_scores.csv"
+
+    print(f"\nSaving results to {output_dir}...")
+    annual_df.to_parquet(annual_path, index=False)
+    trends_df.to_csv(trends_path, index=False)
+    scores_df.to_csv(scores_path, index=False)
+    print("Results saved successfully.")
 
 # %% [markdown]
 # ---
