@@ -4,6 +4,12 @@ All changes to `aidweather` are documented here.
 
 ---
 
+## [0.1.1] — 2026-06-25
+
+### Features & Improvements
+
+- **Compatibility & Clean APIs**: Production maintenance release ensuring compatibility and metadata stability.
+
 ## [0.1.0] — 2026-06-10
 
 ### Breaking Changes
