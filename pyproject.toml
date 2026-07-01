@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aidweather"
-version = "0.1.1"
+version = "0.1.2"
 description = "Weather data retrieval and validation for agricultural applications."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -41,6 +41,7 @@ dependencies = [
 test = [
     "pytest>=8.0.0",
     "requests-mock>=1.11.0",
+    "types-requests>=2.31.0",
 ]
 
 [project.scripts]
