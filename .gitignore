@@ -48,3 +48,5 @@ ENV/
 # Miscelaneous
 scratch/
 scripts/
+!scripts/beta_gate.sh
+outputs/

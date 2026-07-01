@@ -4,6 +4,19 @@ All changes to `aidweather` are documented here.
 
 ---
 
+## [0.1.2] — 2026-07-01
+
+### Release Engineering
+
+- **First version actually tagged and published.** Versions 0.1.0 and 0.1.1 below were
+  never tagged on GitHub or published to PyPI/TestPyPI — `0.1.2` is the first release
+  where the version recorded in `pyproject.toml`, `src/aidweather/__init__.py`, and this
+  changelog are verified to agree before publishing.
+- Added `types-requests` to the `test` extra so `mypy` runs clean.
+- Stopped tracking generated example run artifacts under `outputs/`.
+- Added CI workflows for publishing to TestPyPI (`publish-testpypi.yml`, manual trigger)
+  and PyPI (`publish.yml`, triggered by GitHub Releases) via trusted publishing (OIDC).
+
 ## [0.1.1] — 2026-06-25
 
 ### Features & Improvements

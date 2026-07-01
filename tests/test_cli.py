@@ -54,9 +54,11 @@ def test_help():
 
 def test_version():
     """Test that the CLI exposes a top-level version option."""
+    from aidweather import __version__
+
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "aidweather 0.1.0" in result.stdout
+    assert f"aidweather {__version__}" in result.stdout
 
 
 def test_params_list():
