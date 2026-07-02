@@ -304,4 +304,4 @@ If your site passes these thresholds, NASA POWER data from `aidweather` is fit f
 
 ---
 
-*More data sources will be added to this comparison as they are validated against the `aidweather` workflow. Candidates include ERA5 (via the CDS API / `cdsapi`) and CHIRPS (precipitation-only).*
+*More data sources will be added to this comparison as they are validated against the `aidweather` workflow. Candidates include CHIRPS (precipitation-only).*
