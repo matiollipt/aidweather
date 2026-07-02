@@ -16,6 +16,7 @@ __pycache__/
 *.sqlite
 
 # Dev & IDE folders/files
+.agents/
 .claude/
 .vscode/
 .idea/
