@@ -51,3 +51,11 @@ API endpoint URLs, parameter metadata, cache paths, and color maps live in one p
 ## Practical outcome
 
 `aidweather` is a **foundational data ingestion layer**. It is designed to be called once per location/date-range combination and to be invisible on every subsequent call (cache hit). The output is always a `pandas` DataFrame with a `DatetimeIndex` and numeric columns — ready for analysis, joining with field data, or passing to a model.
+
+---
+
+## Related documentation
+
+- [Client documentation](client.md) — complete `PowerClient` API reference.
+- [Data Source Comparison](data_source_comparison.md) — when to use NASA POWER vs. Meteostat and other alternatives.
+- [NASA POWER Usage & Guardrails](aidweather_nasa_power_usage.md) — API limits, rate limiting, and responsible use.

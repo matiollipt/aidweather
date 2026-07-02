@@ -9,6 +9,7 @@
 
 > [!IMPORTANT]
 > **NASA POWER Compliance:** Review the [License & Data Usage Guidelines](docs/NASA_POWER_Licence_Usage.md) and [API Usage & Guardrails](docs/aidweather_nasa_power_usage.md).
+> **Choosing a data source:** See the [Data Source Comparison](docs/data_source_comparison.md) for a detailed comparison of NASA POWER vs. Meteostat (and future sources), with installation instructions, known limitations, and a decision guide.
 
 ---
 
@@ -197,6 +198,7 @@ aidweather cache clear --yes
 
 The package exposes key modules for managing data integration. For a top-level overview, see the [\_\_init\_\_](docs/__init__.md) documentation.
 For a complete inventory of all package classes and functions, see the [API Inventory](docs/api_inventory.md).
+To understand how NASA POWER compares to alternative weather data sources (Meteostat, ERA5, etc.) and how to choose among them, see the [Data Source Comparison](docs/data_source_comparison.md).
 
 ```python
 from aidweather import (

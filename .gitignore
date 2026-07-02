@@ -47,7 +47,7 @@ env/
 ENV/
 
 # Miscelaneous
-scratch/
+scratchpad/
 scripts/
 !scripts/beta_gate.sh
 outputs/

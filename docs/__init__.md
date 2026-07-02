@@ -71,3 +71,11 @@ To enable debug output in your own application:
 import logging
 logging.basicConfig(level=logging.INFO)
 ```
+
+---
+
+## See also
+
+- [Client documentation](client.md) — full `PowerClient` API reference.
+- [Data Source Comparison](data_source_comparison.md) — NASA POWER vs. Meteostat and other tools: data origins, limitations, installation, and a decision guide.
+- [API Inventory](api_inventory.md) — every public class and function in the package.

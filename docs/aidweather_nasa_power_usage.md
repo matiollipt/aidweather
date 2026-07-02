@@ -82,3 +82,9 @@ NASA POWER data is licensed under [Creative Commons Attribution 4.0 (CC BY 4.0)]
 > *"These data were obtained from the NASA Langley Research Center (LaRC) POWER Project funded through the NASA Earth Science Directorate Applied Science Program."*
 
 See [NASA_POWER_Licence_Usage.md](NASA_POWER_Licence_Usage.md) for the full compliance summary.
+
+---
+
+## Choosing NASA POWER vs. other sources
+
+NASA POWER is not the only option for historical weather data. For a structured comparison with Meteostat and other tools — covering data origins, spatial coverage, installation, known limitations, and a decision guide — see the [Data Source Comparison](data_source_comparison.md).
