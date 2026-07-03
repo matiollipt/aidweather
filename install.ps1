@@ -48,8 +48,88 @@ function Ok ($msg) { Write-Host "ok: $msg" -ForegroundColor Green }
 function Warn ($msg) { Write-Warning $msg }
 function Die ($msg) { Write-Error "error: $msg"; exit 1 }
 
+# Ensure uv is installed
+function Ensure-Uv {
+    if (Get-Command uv -ErrorAction SilentlyContinue) {
+        return $true
+    }
+
+    # Try to find uv in standard user installation locations
+    $HomeDir = [System.Environment]::GetFolderPath("UserProfile")
+    $UvPaths = @(
+        (Join-Path $HomeDir ".local/bin"),
+        (Join-Path $HomeDir ".cargo/bin"),
+        (Join-Path $HomeDir "AppData/Roaming/local/bin")
+    )
+    foreach ($p in $UvPaths) {
+        $uvExe = Join-Path $p "uv"
+        $uvExeWin = Join-Path $p "uv.exe"
+        if ((Test-Path $uvExe) -or (Test-Path $uvExeWin)) {
+            $env:PATH = "$p$([System.IO.Path]::PathSeparator)$env:PATH"
+            return $true
+        }
+    }
+
+    # uv is not found anywhere. Prompt to install.
+    if (-not $Yes) {
+        # Check if host is interactive
+        if ($Host.UI.RawUI) {
+            $response = Read-Host "uv (modern Python package manager) was not found. Would you like to install it automatically to bootstrap the installation? [Y/n]"
+            if ($response -match "^[Nn]") {
+                return $false
+            }
+        } else {
+            Warn "Non-interactive shell. Proceeding with uv installation..."
+        }
+    }
+
+    Info "Installing uv..."
+    $isWindows = $true
+    if ($PSVersionTable.PSVersion.Major -ge 6) {
+        $isWindows = $IsWindows
+    } elseif ($env:OS -match "Windows" -or $PSVersionTable.Platform -eq "Win32NT") {
+        $isWindows = $true
+    } else {
+        $isWindows = $false
+    }
+    
+    try {
+        if ($isWindows) {
+            Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression
+        } else {
+            if (Get-Command curl -ErrorAction SilentlyContinue) {
+                curl -LsSf https://astral.sh/uv/install.sh | sh
+            } elseif (Get-Command wget -ErrorAction SilentlyContinue) {
+                wget -qO- https://astral.sh/uv/install.sh | sh
+            } else {
+                Die "Neither curl nor wget found. Please install uv manually (https://astral.sh/uv)."
+            }
+        }
+    } catch {
+        Warn "Failed to install uv automatically: $_"
+        return $false
+    }
+
+    # Reload PATH to find the newly installed uv
+    foreach ($p in $UvPaths) {
+        $uvExe = Join-Path $p "uv"
+        $uvExeWin = Join-Path $p "uv.exe"
+        if ((Test-Path $uvExe) -or (Test-Path $uvExeWin)) {
+            $env:PATH = "$p$([System.IO.Path]::PathSeparator)$env:PATH"
+            Ok "uv successfully installed and added to PATH."
+            return $true
+        }
+    }
+
+    return (Get-Command uv -ErrorAction SilentlyContinue) -ne $null
+}
+
+# Run Ensure-Uv to check or install uv
+$HasUv = Ensure-Uv
+
 # Python detection
 function Detect-Python {
+    # Try standard system python first
     foreach ($cmd in "py", "python", "python3") {
         if (Get-Command $cmd -ErrorAction SilentlyContinue) {
             try {
@@ -65,6 +145,12 @@ function Detect-Python {
             }
         }
     }
+
+    # If system Python not found but uv is present, we can use uv
+    if ($HasUv) {
+        return "uv"
+    }
+
     return $null
 }
 
@@ -74,7 +160,17 @@ if (-not $PythonCmd) {
     Die "Python 3.9+ required but not found. Please install Python first (or make sure it is in your PATH)."
 }
 
-$PyVer = & $PythonCmd -c "import sys; v=sys.version_info; print(f'{v.major}.{v.minor}.{v.micro}')"
+if ($PythonCmd -eq "uv") {
+    try {
+        # uv run python will automatically download/use a managed Python version if none exists
+        $PyVer = uv run python -c "import sys; v=sys.version_info; print(f'{v.major}.{v.minor}.{v.micro}')"
+        $PythonCmd = "uv run python"
+    } catch {
+        Die "uv was found but failed to run/download Python: $_"
+    }
+} else {
+    $PyVer = & $PythonCmd -c "import sys; v=sys.version_info; print(f'{v.major}.{v.minor}.{v.micro}')"
+}
 Ok "Python $PyVer ($PythonCmd)"
 
 # 2. Detect context (clone vs bootstrap)
@@ -250,7 +346,11 @@ if ($UvTool) {
         Warn "You may need to run 'uv tool update-shell' and restart your terminal."
     }
 } else {
-    & $PythonBin -c "import sys; import aidweather"
+    if ($PythonBin -eq "uv run python") {
+        uv run python -c "import sys; import aidweather"
+    } else {
+        & $PythonBin -c "import sys; import aidweather"
+    }
     if ($LASTEXITCODE -ne 0) {
         Die "Smoke test failed: Could not import aidweather."
     }
