@@ -47,7 +47,9 @@ env/
 ENV/
 
 # Miscelaneous
-scratchpad/
-scripts/
-!scripts/beta_gate.sh
+examples/external_validation/data/
+examples/external_validation/plots/
+examples/external_validation/outputs/
+/scripts/
+!/scripts/beta_gate.sh
 outputs/

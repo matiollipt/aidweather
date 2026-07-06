@@ -1,0 +1,10 @@
+# AidWeather Installation Test - Windows - Virtual Box
+
+## Install Virtual Box
+sudo apt update
+sudo apt install virtualbox
+
+## Download Windows 
+https://www.microsoft.com/pt-br/software-download/windows11
+
+
