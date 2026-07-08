@@ -52,6 +52,9 @@ else:
 _WORKSPACE_DIR = _VALIDATION_DIR.parent.parent
 sys.path.insert(0, str(_WORKSPACE_DIR / "src"))
 
+PLOT_DIR = _VALIDATION_DIR / "plots"
+PLOT_DIR.mkdir(exist_ok=True)
+
 try:
     from aidweather import PowerClient
 except ImportError:
