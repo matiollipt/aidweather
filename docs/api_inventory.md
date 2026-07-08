@@ -1,8 +1,8 @@
 # API Inventory
 
 This page is the complete inventory of classes and functions currently defined in
-`src/aidweather`. It is written for Python users who - like me - need a reliable mental map
-of the package without guessing.
+`src/aidweather`. It's here for anyone who wants a reliable mental map of the package
+without having to guess from the source.
 
 Names starting with `_` are implementation details. They are documented here for
 transparency, debugging, and automated code navigation, but they are not stable
@@ -61,7 +61,7 @@ Primary methods:
 |---|---|---|
 | `get_point_data(request=None, **kwargs)` | Fetch data for one latitude/longitude pair. Accepts either a `PointRequest` or keyword arguments. | `pd.DataFrame` indexed by date/time |
 | `get_point_data_from_coordinate(coord, start, end, params, elevation=None, wind_elevation=None, wind_surface=None)` | Same as `get_point_data`, but starts from a `GeoCoordinate`. | `pd.DataFrame` |
-| `get_multi_point_data(points, start, end, params, max_workers=5)` | Fetch several points in parallel. Points may be dicts, tuples, or a DataFrame with `lat`/`lon`. | `(combined_df, failed_points)` |
+| `get_multi_point_data(points, start, end, params, max_workers=5)` | Fetch several points in parallel. Points may be dicts, tuples, or a DataFrame with `lat`/`lon`. A `name` column is added to the result only for points that provided one (e.g. dicts with a `"name"` key) — plain `(lat, lon)` tuples get no `name` column. | `(combined_df, failed_points)` |
 | `get_transect_data(request=None, **kwargs)` | Fetch data along a 1D transect between two `GeoCoordinate` endpoints. Sampling controlled by `num_points` or `spacing_km`; minimum spacing 0.5° (~55 km) enforced. | Combined `pd.DataFrame` |
 | `get_transect_data_from_coordinates(coord_a, coord_b, start, end, params, num_points=None, spacing_km=None, max_workers=5)` | Transect helper accepting two `GeoCoordinate` objects as start and end endpoints. | `pd.DataFrame` |
 | `get_regional_data(lat_min, lat_max, lon_min, lon_max, start, end, params, request=None)` | Fetch regional data on a 0.5° grid within a bounding box (≤ 4.5° × 4.5°). Daily only, one parameter. | `pd.DataFrame` with `lat`, `lon`, `elevation` columns |
@@ -81,6 +81,11 @@ Important behavior:
 - Daily point requests allow up to 20 parameters; hourly point requests allow up
   to 15; daily regional requests allow one parameter.
 - Regional bounding boxes must not exceed 4.5° on either axis.
+- Unrecognized parameter codes raise a `UserWarning` rather than failing outright
+  (NASA POWER may still accept codes not in the bundled catalogue).
+- `start` must not be after `end`, or a `ValueError` is raised.
+- `wind_elevation` (when given) must be between 10 and 300 meters, or a
+  `ValueError` is raised.
 - Missing NASA fill values (`-999`) become pandas missing values.
 - Empty API responses become DataFrames with the requested date range and
   requested columns filled with `NaN`.
@@ -97,6 +102,7 @@ the code or writing focused tests.
 | `_session_with_retries(total=5, backoff_factor=0.5, status_forcelist=(429, 500, 502, 503, 504))` | Create a `requests.Session` with retry/backoff behavior and the package user agent. |
 | `_make_cache_key(payload, temporal_api="daily")` | Build a deterministic SHA-256 cache key, excluding dates. |
 | `_format_bytes(size)` | Format bytes as `B`, `KiB`, `MiB`, or larger units. |
+| `_safe_payload_repr(payload)` | Build a compact, safe string representation of a request payload for logging, tolerating non-JSON-serializable values. |
 | `_to_naive(ts)` | Strip timezone information from a pandas `Timestamp`. |
 | `_get_date_ranges_to_fetch(requested_start, requested_end, cached_df, temporal_api)` | Identify missing leading/trailing date ranges not present in cached data. |
 | `_convert_df_to_cacheable_json(df, temporal_api)` | Convert a parsed DataFrame back into a compact POWER-like JSON shape for storage. |
@@ -227,7 +233,7 @@ pipelines.
 | `inplace` | `False` | Modify the original DataFrame instead of returning a copy. |
 | `candidates` | `None` | Alternative source column names to try. |
 | `index_fallback` | `True` | Use a `DatetimeIndex` if no source column is found. |
-| `normalize` | `True` | Normalize datetimes to midnight. |
+| `normalize` | `False` | Normalize datetimes to midnight. |
 | `strip_timezone` | `True` | Remove timezone information. |
 
 Internal helpers:

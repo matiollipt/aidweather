@@ -28,7 +28,7 @@ df = ensure_date_column(df, name="date", candidates=["obs_date"])
 # Date is in the index (common with PowerClient output)
 df = pd.DataFrame({"T2M": [22.1]}, index=pd.to_datetime(["2023-01-01"]))
 df = ensure_date_column(df, name="date")
-# Result: index is moved into a "date" column
+# Result: index values are copied into a new "date" column (the index itself is left in place)
 ```
 
 ---
@@ -40,7 +40,7 @@ df = ensure_date_column(df, name="date")
 | `name` | `"date"` | Target column name in the output |
 | `candidates` | `None` | List of alternative column names to search for |
 | `index_fallback` | `True` | Use the DatetimeIndex if no column is found |
-| `normalize` | `True` | Strip sub-day time components (normalize to midnight) |
+| `normalize` | `False` | Strip sub-day time components (normalize to midnight) |
 | `strip_timezone` | `True` | Remove timezone info |
 | `inplace` | `False` | Modify the DataFrame in place instead of returning a copy |
 

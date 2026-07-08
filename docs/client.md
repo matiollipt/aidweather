@@ -109,7 +109,7 @@ df, failed = client.get_multi_point_data(
 )
 ```
 
-Returns a combined DataFrame with `lat`, `lon`, and `name` columns added, plus a list of any points that failed.
+Returns a combined DataFrame with `lat` and `lon` columns added, plus a list of any points that failed. A `name` column is added too, but only for points that provided one — plain `(lat, lon)` tuples produce no `name` column.
 
 > [!NOTE]
 > The client defaults `max_workers` to `5` and automatically clamps higher values to protect the NASA POWER service. A client-side sliding-window rate limiter is also active by default at 30 requests per minute.
@@ -235,3 +235,6 @@ client.summarize(df)
 - **Cache failure:** logs a warning and falls back to live API requests.
 - **Stale cache on network error:** if the API is unreachable and cached data exists, the cached data is returned with a warning.
 - **Empty response:** returns a DataFrame filled with `NaN` for the requested date range and columns.
+- **Unrecognized parameter codes:** issues a `UserWarning` rather than failing — NASA POWER may still accept codes not in the bundled catalogue.
+- **`start` after `end`:** raises a `ValueError` before any request is sent.
+- **`wind_elevation` out of range:** if provided, it must be between 10 and 300 meters, or a `ValueError` is raised.

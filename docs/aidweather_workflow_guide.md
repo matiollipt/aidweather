@@ -36,7 +36,7 @@ Coordinates arrive from field records, GPS exports, and user input in DMS, DDM, 
 
 ### `config` — centralized settings
 
-API endpoint URLs, parameter metadata, cache paths, and color maps live in one place (`config.json`) and are accessible through the `cfg` singleton. Downstream packages in the `aid*` ecosystem share this config file, so there is no duplication of settings.
+API endpoint URLs, parameter metadata, cache paths, and logging settings live in one place (`config.json`) and are accessible through the `cfg` singleton. Downstream packages in the `aid*` ecosystem share this config file, so there is no duplication of settings.
 
 ### `client` — data acquisition
 
@@ -50,7 +50,7 @@ API endpoint URLs, parameter metadata, cache paths, and color maps live in one p
 
 ## Practical outcome
 
-`aidweather` is a **foundational data ingestion layer**. It is designed to be called once per location/date-range combination and to be invisible on every subsequent call (cache hit). The output is always a `pandas` DataFrame with a `DatetimeIndex` and numeric columns — ready for analysis, joining with field data, or passing to a model.
+In practice, you call `aidweather` once per location and date range, and every later call for the same request is served from cache instead of hitting the API again. The output is always a `pandas` DataFrame with a `DatetimeIndex` and numeric columns — ready for analysis, joining with field data, or passing to a model.
 
 ---
 
@@ -58,4 +58,4 @@ API endpoint URLs, parameter metadata, cache paths, and color maps live in one p
 
 - [Client documentation](client.md) — complete `PowerClient` API reference.
 - [Data Source Comparison](data_source_comparison.md) — when to use NASA POWER vs. Meteostat and other alternatives.
-- [NASA POWER Usage & Guardrails](aidweather_nasa_power_usage.md) — API limits, rate limiting, and responsible use.
+- [NASA POWER License & Usage](aidweather_nasa_power_usage.md) — API limits, rate limiting, licensing, attribution, and responsible use.

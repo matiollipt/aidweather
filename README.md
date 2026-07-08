@@ -8,7 +8,7 @@
 > **Beta:** Public API and CLI output may change before 1.0. Please [report issues](https://github.com/matiollipt/aidweather/issues) — feedback is welcome.
 
 > [!IMPORTANT]
-> **NASA POWER Compliance:** Review the [License & Data Usage Guidelines](docs/NASA_POWER_Licence_Usage.md) and [API Usage & Guardrails](docs/aidweather_nasa_power_usage.md).
+> **NASA POWER Compliance:** Review the [License, Usage & API Guardrails](docs/aidweather_nasa_power_usage.md) guide.
 > **Choosing a data source:** See the [Data Source Comparison](docs/data_source_comparison.md) for a detailed comparison of NASA POWER vs. Meteostat (and future sources), with installation instructions, known limitations, and a decision guide.
 
 ---
@@ -225,6 +225,7 @@ from aidweather import (
 |---|---|
 | Linux | `~/.cache/aidweather/aidweather_cache.db` |
 | macOS | `~/Library/Caches/aidweather/aidweather_cache.db` |
+| Windows | `%LOCALAPPDATA%\aidweather\Cache\aidweather_cache.db` |
 
 The cache is **shared across all your projects** — if you query the same location in two different scripts, the second call is instant.
 

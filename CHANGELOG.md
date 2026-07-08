@@ -16,7 +16,7 @@ All changes to `aidweather` are documented here.
 - Stopped tracking generated example run artifacts under `outputs/`.
 - Added CI workflows for publishing to TestPyPI (`publish-testpypi.yml`, manual trigger)
   and PyPI (`publish.yml`, triggered by GitHub Releases) via trusted publishing (OIDC).
-- Removed unreleased dependency `aidviz` from `pyproject.toml` and consolidated all example-specific dependencies into a helper script `examples/install_examples_deps.sh`.
+- Removed unreleased dependency `aidviz` from `pyproject.toml` and consolidated example-specific dependencies into a local dev helper script (not distributed with the package; `examples/` is untracked).
 
 ## [0.1.1] — 2026-06-25
 
@@ -40,5 +40,5 @@ I'm thrilled to present the initial **beta release** of `aidweather`, a Python p
 - `ensure_date_column` — robust DataFrame date-column normalization for downstream pipelines.
 - `cfg` / `get_config` — singleton config with dot-notation access and XDG-compliant cache path resolution.
 - CLI — `aidweather fetch`, `fetch-multi`, `fetch-transect`, `params list/describe`, `cache info/clear`.
-- Bundled `config.json` with NASA POWER parameter catalogue, color map, and API limits.
+- Bundled `config.json` with NASA POWER parameter catalogue and API limits.
 - Apache-2.0 license.

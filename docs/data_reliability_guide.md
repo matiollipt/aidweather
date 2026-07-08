@@ -1,37 +1,27 @@
-# AidWeather: Data Reliability Guide for Agricultural Use Cases
+# Data reliability guide for agricultural use cases
 
-This document outlines the comparative reliability of meteorological data sources used in agricultural analytics. Specifically, it contrasts the **NASA POWER** dataset (powering AidWeather) against third-party interpolation APIs like **Meteostat** and **Open-Meteo**.
+This document compares the reliability characteristics of meteorological data sources used in agricultural analytics — specifically, the **NASA POWER** dataset (which powers `aidweather`) against station-based, interpolated sources like **Meteostat** and **Open-Meteo**.
 
-## The Challenge: Interpolation vs. Stability
+## The challenge: interpolation vs. stability
 
-Agricultural data modeling requires decades of stable, consistent daily weather data to predict crop yields, evaluate drought risks, and train machine learning models. The choice of underlying meteorological data source can drastically impact the reliability of these models.
+Agricultural data modeling requires decades of stable, consistent daily weather data to predict crop yields, evaluate drought risk, and train machine learning models. The choice of underlying meteorological data source can drastically impact the reliability of these models.
 
-### 1. The Pitfalls of Interpolated Local Stations
+### The pitfalls of interpolated local stations
 
-Tools like **Meteostat** or some **Open-Meteo** variants often rely on local weather station observations (e.g., INMET in Brazil) combined with interpolation algorithms to estimate conditions at specific coordinates. While ground-truth stations provide high-fidelity readings, relying purely on interpolated stations for long-term agricultural modeling introduces severe risks:
+Tools like Meteostat or some Open-Meteo variants rely on local weather station observations (e.g., INMET in Brazil) combined with interpolation algorithms to estimate conditions at specific coordinates. Ground-truth stations provide high-fidelity readings, but relying purely on interpolated stations for long-term agricultural modeling introduces real risks:
 
-- **Equipment Changes & Failures:** Sensors break, calibration drifts, and equipment gets replaced. A localized anomaly might not represent actual climate shifts, but rather a faulty thermometer or rain gauge.
-- **Station Relocation:** Over a 20-year span, local stations are frequently moved. A shift of just a few kilometers or a change in elevation can break the continuity of the time series, suddenly changing the temperature or precipitation baseline.
-- **Spatial Interpolation Errors:** When a local station goes offline, these APIs interpolate data from the next nearest stations. In large agricultural regions (e.g., the Brazilian Cerrado or Amazon), the next available station might be hundreds of kilometers away, located in a completely different microclimate.
+- **Equipment changes & failures:** sensors break, calibration drifts, and equipment gets replaced. A localized anomaly might reflect a faulty thermometer or rain gauge rather than an actual climate shift.
+- **Station relocation:** over a 20-year span, local stations are frequently moved. A shift of just a few kilometers, or a change in elevation, can break the continuity of the time series and quietly change the temperature or precipitation baseline.
+- **Spatial interpolation errors:** when a local station goes offline, these APIs interpolate from the next nearest stations. In large agricultural regions (e.g., the Brazilian Cerrado or Amazon), the next available station might be hundreds of kilometers away, in a completely different microclimate.
 
-When viewing data through PCA or t-SNE dimensionality reduction, these interpolated tools often exhibit high variance and unpredictable clustering, wandering away from the true local climate profile when historical data gets patchy.
+### The NASA POWER advantage: stable grid data
 
-### 2. The NASA POWER Advantage: Stable Grid Data
+`aidweather` is a client for the NASA POWER (Prediction of Worldwide Energy Resources) dataset, which is built on a stable, long-term grid of satellite observations and assimilation models (like MERRA-2).
 
-**AidWeather** acts as a robust client for the **NASA POWER** (Prediction of Worldwide Energy Resources) dataset. This dataset is built on a stable, long-term grid of satellite observations and assimilation models (like MERRA-2).
-
-- **Consistency over Time:** Because the data is derived from planetary-scale satellite assimilation rather than individual, fragile ground sensors, the time-series remains incredibly stable over decades. There are no "station relocations" in space.
-- **Uniform Spatial Coverage:** NASA POWER provides a continuous 0.5° x 0.5° global grid. Even in remote agricultural hubs where physical weather stations are sparse or non-existent, the data quality remains reliable without relying on extreme spatial interpolation.
-- **Resilience to Missing Data:** NASA handles missing values natively at the model assimilation level. AidWeather further standardizes this by coercing the few remaining `-999` fill values into clean numeric `NaN`s, ensuring downstream pandas/numpy pipelines never silently ingest invalid identifiers as actual weather readings.
-
-## Visualizing the Difference
-
-In our internal validation clustering models, we map climate profiles (17-dimensional vectors of temperature and precipitation features) across major agricultural hubs. 
-
-By grouping data into **"Stable"** (INMET ground truth + AidWeather) and **"Interpolated"** (Meteostat + Open-Meteo), we observe that AidWeather consistently anchors closely to the INMET ground truth in dense regions. More importantly, in remote regions where INMET data gets spotty, the interpolated tools show high divergence (visualized by long "spider plot" lines pulling away from the ground truth), whereas AidWeather remains consistent with the broader regional climate cluster.
+- **Consistency over time:** because the data comes from planetary-scale satellite assimilation rather than individual, fragile ground sensors, the time series stays stable over decades. There's no such thing as a "station relocation" in a satellite-derived grid.
+- **Uniform spatial coverage:** NASA POWER provides a continuous 0.5° × 0.5° global grid. Even in remote agricultural hubs where physical weather stations are sparse or nonexistent, data quality remains reliable without relying on extreme spatial interpolation.
+- **Resilience to missing data:** NASA handles missing values at the model assimilation level. `aidweather` further standardizes this by coercing the few remaining `-999` fill values into clean numeric `NaN`s, so downstream pandas/numpy pipelines never silently ingest invalid sentinel values as real weather readings.
 
 ## Conclusion
 
-For precision agriculture, **consistency over decades** is often more valuable than extreme localized accuracy that only lasts a few years before failing. 
-
-AidWeather, by leveraging NASA POWER's stable grid, eliminates the hidden uncertainties of local station evolution, equipment failures, and crude spatial interpolation. This makes it the preferred foundational layer for robust, long-term agricultural modeling.
+For precision agriculture, consistency over decades is often more valuable than the marginal accuracy gain of station observations that only last a few years before a relocation or outage breaks the series. By leveraging NASA POWER's stable grid, `aidweather` avoids the hidden uncertainties of station evolution, equipment failures, and crude spatial interpolation — making it a solid foundational layer for long-term agricultural modeling.

@@ -124,3 +124,32 @@ def test_config_logging_path_resolution(monkeypatch):
 
     finally:
         cfg.set("logging_config", original_config)
+
+
+def test_file_logging_wiring(tmp_path):
+    import logging
+
+    import aidweather
+    from aidweather.config import cfg
+
+    original_config = cfg.get("logging_config")
+    logger = logging.getLogger("aidweather")
+    original_handlers = list(logger.handlers)
+
+    try:
+        log_path = tmp_path / "aidweather.log"
+        cfg.set(
+            "logging_config",
+            {"enabled": True, "filename": str(log_path), "level": "INFO"},
+        )
+        aidweather._configure_file_logging()
+
+        logger.info("hello from test_file_logging_wiring")
+        for handler in logger.handlers:
+            handler.flush()
+
+        assert log_path.exists()
+        assert "hello from test_file_logging_wiring" in log_path.read_text()
+    finally:
+        logger.handlers = original_handlers
+        cfg.set("logging_config", original_config)

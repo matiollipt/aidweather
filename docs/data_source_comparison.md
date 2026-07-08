@@ -63,7 +63,7 @@ Key capabilities:
 
 - **Single-point queries** — daily or hourly data for one lat/lon.
 - **Multi-point batch queries** — fetches dozens of sites in parallel with concurrency control.
-- **Spatial transects** — evenly-spaced points along a great-circle path between two endpoints.
+- **Spatial transects** — evenly-spaced points along a straight-line path between two endpoints.
 - **Regional grid queries** — returns data for every 0.5° cell within a bounding box (up to 4.5° × 4.5°).
 - **Smart caching** — results are stored in a shared SQLite database compressed with gzip. Repeated queries for the same location are served from disk instantly, with zero new API requests.
 - **Interval splitting** — if you previously cached Jan–Jun and now request Jan–Dec, only Jul–Dec is fetched from the API.
@@ -277,7 +277,7 @@ print(f"Mean bias (Meteostat - NASA POWER): {bias:.3f} °C")
 
 ## Validation workflow
 
-`aidweather` ships a validation scratchpad at [`scratchpad/external_validation.py`](../scratchpad/external_validation.py) that implements a full comparison workflow for a single location (Brasília, Brazil, 2025):
+If you want to check how well NASA POWER (via `aidweather`) tracks ground-truth station data at your site, a straightforward validation workflow looks like this:
 
 1. **Fetches NASA POWER** directly via the REST API and via `aidweather` (to verify they match exactly).
 2. **Fetches Meteostat** for the same coordinate and period.

@@ -20,6 +20,7 @@
 # | 5 · Multi-point | Fetch data for several locations in parallel |
 # | 6 · Data cleanup | Standardise the date column in any DataFrame |
 # | 7 · Logging | Configure and enable logging to a local log file |
+# | 8 · One-liner bonus | Point and regional queries in a single call |
 
 
 # %%
@@ -423,6 +424,48 @@ if log_path.exists():
             print("  " + line.strip())
 else:
     print(f"Log file not found at: {log_path}")
+
+# %% [markdown]
+# ---
+# ## 8 · One-liner bonus
+#
+# Get NASA POWER API data into a tidy dataframe in one line — point or regional:
+
+# %%
+
+# Grab a year of weather for any point on Earth:
+df_oneliner = PowerClient().get_point_data(
+    lat=-23.55,
+    lon=-46.63,
+    start="2023-01-01",
+    end="2023-12-31",
+    params=["T2M", "PRECTOTCORR"],
+)
+
+print("\nShape:", df_oneliner.shape)
+print("\nHead:")
+print(df_oneliner.head())
+print("\nDescribe:")
+print(df_oneliner.describe())
+
+# %% [markdown]
+# Or a regional grid over a bounding box (one parameter per request,
+# ≤ 4.5° × 4.5°, returned as a 0.5° × 0.5° grid):
+
+# %%
+df_regional = client.get_regional_data(
+    lat_min=-23.5,
+    lat_max=-20.0,
+    lon_min=-47.0,
+    lon_max=-44.0,
+    start="2023-01-01",
+    end="2023-01-05",
+    params=["T2M"],
+)
+
+print("\nRegional shape:", df_regional.shape)
+print(df_regional.head())
+
 
 # %% [markdown]
 # ---
