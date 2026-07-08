@@ -94,6 +94,12 @@ Run the test suite:
 uv run --with-editable . --extra test pytest -q
 ```
 
+By default, the test suite skips live API calls to prevent service spam. To run the live integration tests against the actual NASA POWER endpoints, set the `AIDWEATHER_RUN_LIVE_TESTS` environment variable to `1`:
+
+```bash
+AIDWEATHER_RUN_LIVE_TESTS=1 uv run --with-editable . --extra test pytest
+```
+
 Before publishing, follow the [Release Checklist](docs/release_checklist.md).
 
 ## Quick Start

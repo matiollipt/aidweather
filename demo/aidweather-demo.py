@@ -364,7 +364,7 @@ raw_a = pd.DataFrame(
 )
 
 clean_a = ensure_date_column(
-    raw_a, name="date", candidates=["obs_date", "measurement_time"]
+    raw_a, name="date", candidates=["obs_date", "measurement_time"], normalize=True
 )
 print("Before:")
 print(raw_a)
@@ -379,7 +379,7 @@ raw_b = pd.DataFrame(
     index=pd.date_range("2023-06-01", periods=3, freq="D"),
 )
 
-clean_b = ensure_date_column(raw_b, name="date", index_fallback=True)
+clean_b = ensure_date_column(raw_b, name="date", index_fallback=True, normalize=True)
 print("Before:")
 print(raw_b)
 print("\nAfter :")

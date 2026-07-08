@@ -37,7 +37,7 @@ class DateColumnOptions:
     inplace: bool = False
     candidates: Iterable[str] | None = None
     index_fallback: bool = True
-    normalize: bool = True
+    normalize: bool = False
     strip_timezone: bool = True
 
 
@@ -105,7 +105,7 @@ def ensure_date_column(
             candidates: A list of alternative column names to search for.
             index_fallback: If True, allows using the DataFrame's index as
                 the date source when no matching column is found.
-            normalize: If True, normalizes the datetime to midnight.
+            normalize: If True, normalizes the datetime to midnight (default: False).
             strip_timezone: If True, removes timezone information.
 
     Returns:
@@ -119,7 +119,7 @@ def ensure_date_column(
         inplace=kwargs.get("inplace", False),
         candidates=kwargs.get("candidates", None),
         index_fallback=kwargs.get("index_fallback", True),
-        normalize=kwargs.get("normalize", True),
+        normalize=kwargs.get("normalize", False),
         strip_timezone=kwargs.get("strip_timezone", True),
     )
 

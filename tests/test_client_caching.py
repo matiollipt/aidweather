@@ -151,3 +151,36 @@ def test_hourly_caching_logic(mock_cache_config):
         assert m.call_count == 1  # No extra call
         pd.testing.assert_frame_equal(df1, df2)
 
+
+def test_concurrent_cache_writes(mock_cache_config):
+    """Verifies that concurrent threads writing to the database do not cause lock failures."""
+    import threading
+    client = PowerClient()
+    
+    # We want multiple threads to write to the cache database concurrently.
+    num_threads = 10
+    errors = []
+    
+    def worker(tid):
+        try:
+            key = f"key_{tid}"
+            data = {"properties": {"parameter": {"T2M": {f"20230101{h:02d}": 10.0 for h in range(24)}}}}
+            client._write_to_cache_db(key, data)
+        except Exception as e:
+            errors.append(e)
+            
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(num_threads)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+        
+    assert not errors, f"Encountered concurrent write errors: {errors}"
+    
+    # Verify we can read them back
+    for i in range(num_threads):
+        df = client._read_from_cache_db(f"key_{i}")
+        assert df is not None
+        assert not df.empty
+
+

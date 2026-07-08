@@ -572,6 +572,7 @@ class PowerClient:
     params_desc: dict[str, str]
     session: requests.Session
     db_conn: sqlite3.Connection | None
+    db_lock: threading.Lock
     cache_cfg: dict[str, Any]
     api_limits: dict[str, Any]
     max_workers_limit: int
@@ -603,6 +604,7 @@ class PowerClient:
         self.params_desc = cfg.params(group="all")
         self.session = session or _session_with_retries()
         self.db_conn: sqlite3.Connection | None = None
+        self.db_lock = threading.Lock()
         self._metrics: dict[str, Any] = {
             "total_requests": 0,
             "api_calls": 0,
@@ -692,15 +694,16 @@ class PowerClient:
         if not self.db_conn:
             return None
 
-        try:
-            with self.db_conn:
-                cur = self.db_conn.execute(
-                    "SELECT timestamp, data FROM cache WHERE key=?", (key,)
-                )
-                row = cur.fetchone()
-        except sqlite3.Error as e:
-            logger.warning(f"Failed to read from cache database for key {key}: {e}")
-            return None
+        with self.db_lock:
+            try:
+                with self.db_conn:
+                    cur = self.db_conn.execute(
+                        "SELECT timestamp, data FROM cache WHERE key=?", (key,)
+                    )
+                    row = cur.fetchone()
+            except sqlite3.Error as e:
+                logger.warning(f"Failed to read from cache database for key {key}: {e}")
+                return None
 
         if row:
             _, compressed_data = row
@@ -730,18 +733,19 @@ class PowerClient:
         if not self.db_conn:
             return
 
-        try:
-            compressed_data = gzip.compress(json.dumps(data).encode("utf-8"))
-            self._metrics["cache_final_bytes"] = len(compressed_data)
-            timestamp = datetime.now().isoformat()
+        with self.db_lock:
+            try:
+                compressed_data = gzip.compress(json.dumps(data).encode("utf-8"))
+                self._metrics["cache_final_bytes"] = len(compressed_data)
+                timestamp = datetime.now().isoformat()
 
-            with self.db_conn:
-                self.db_conn.execute(
-                    "INSERT OR REPLACE INTO cache (key, timestamp, data) VALUES (?, ?, ?)",
-                    (key, timestamp, compressed_data),
-                )
-        except (sqlite3.Error, TypeError) as e:
-            logger.warning(f"Could not write to cache for key {key}: {e}")
+                with self.db_conn:
+                    self.db_conn.execute(
+                        "INSERT OR REPLACE INTO cache (key, timestamp, data) VALUES (?, ?, ?)",
+                        (key, timestamp, compressed_data),
+                    )
+            except (sqlite3.Error, TypeError) as e:
+                logger.warning(f"Could not write to cache for key {key}: {e}")
 
     def _format_date(self, date_str: Any) -> str:
         """Formats a date into the required API string format.
