@@ -72,7 +72,6 @@ select = ["E", "F", "I", "UP", "B"]
 ignore = ["E501"]
 
 [tool.mypy]
-python_version = "3.10"
 packages = ["aidweather"]
 ignore_missing_imports = true
 warn_unused_configs = true
