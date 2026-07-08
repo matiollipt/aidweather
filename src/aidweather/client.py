@@ -289,7 +289,8 @@ def _fetch_and_parse(
         return _response_to_dataframe(data, temporal_api), byte_count
 
     except requests.exceptions.RequestException as e:
-        if getattr(e, "response", None) is not None and e.response.status_code == 429:
+        resp_obj = getattr(e, "response", None)
+        if resp_obj is not None and getattr(resp_obj, "status_code", None) == 429:
             logger.error("Rate limit exceeded (HTTP 429). Please slow down requests.")
         logger.error(f"API request failed for payload {payload}: {e}")
         raise OSError(f"API request failed: {e}") from e
@@ -966,12 +967,15 @@ class PowerClient:
 
         cache_key = _make_cache_key(base_payload, self.temporal_api)
 
-        def _parse_payload_date(d_str: str) -> pd.Timestamp:
+        def _parse_payload_date(d_str: str, is_end: bool = False) -> pd.Timestamp:
             fmt = "%Y%m%d%H" if len(str(d_str)) == 10 else "%Y%m%d"
-            return pd.to_datetime(str(d_str), format=fmt)
+            ts = pd.to_datetime(str(d_str), format=fmt)
+            if is_end and fmt == "%Y%m%d" and self.temporal_api == "hourly":
+                ts = ts + pd.Timedelta(hours=23)
+            return ts
 
-        req_start = _parse_payload_date(base_payload["start"])
-        req_end = _parse_payload_date(base_payload["end"])
+        req_start = _parse_payload_date(base_payload["start"], is_end=False)
+        req_end = _parse_payload_date(base_payload["end"], is_end=True)
 
         cached_df = self._read_from_cache_db(cache_key)
 
@@ -1096,7 +1100,6 @@ class PowerClient:
             wind_surface=wind_surface,
         )
         df = self._fetch_data(payload)
-
         if df.empty:
             req_start = pd.to_datetime(start)
             req_end = pd.to_datetime(end)
@@ -1107,7 +1110,10 @@ class PowerClient:
             )
             return pd.DataFrame(np.nan, index=date_range, columns=params)
 
-        return _ensure_all_params_in_df(df, params)
+        df = _ensure_all_params_in_df(df, params)
+        req_start = pd.to_datetime(start)
+        req_end = pd.to_datetime(end)
+        return _filter_df_by_date(df, req_start, req_end)
 
     # ------------------------------------------------------------------
     # get_multi_point_data helpers
@@ -1385,10 +1391,8 @@ class PowerClient:
             byte_count = len(resp.content)
             data = _parse_json_response(resp)
         except requests.exceptions.RequestException as e:
-            if (
-                getattr(e, "response", None) is not None
-                and e.response.status_code == 429
-            ):
+            resp_obj = getattr(e, "response", None)
+            if resp_obj is not None and getattr(resp_obj, "status_code", None) == 429:
                 logger.error(
                     "Rate limit exceeded (HTTP 429). Please slow down requests or use an API key."
                 )

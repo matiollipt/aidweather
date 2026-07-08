@@ -305,7 +305,11 @@ if ($UvTool) {
     }
 } else {
     Info "Installing package"
-    Pip-Install @("-e", ".")
+    if ($Dev) {
+        Pip-Install @("-e", ".")
+    } else {
+        Pip-Install @(".")
+    }
 }
 
 # 8. Install developer dependencies if requested

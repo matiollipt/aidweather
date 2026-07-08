@@ -118,3 +118,36 @@ def test_stale_cache_returned_when_missing_range_fetch_fails(mock_cache_config):
     assert m.call_count == 2
     assert list(stale.index) == list(pd.date_range("2023-01-01", "2023-01-02"))
     assert stale["T2M"].tolist() == [25.0, 26.0]
+
+
+def test_hourly_caching_logic(mock_cache_config):
+    """Verifies that hourly caching handles daily request window correctly without stripping hours."""
+    params = ["T2M"]
+    api_response = {
+        "properties": {
+            "parameter": {
+                "T2M": {
+                    f"20230101{h:02d}": 8.0 + h * 0.5 for h in range(24)
+                }
+            }
+        }
+    }
+    with requests_mock.Mocker() as m:
+        m.get(requests_mock.ANY, json=api_response)
+        client = PowerClient(temporal_api="hourly")
+
+        # 1. First Call - Should hit API and return correct sliced range
+        df1 = client.get_point_data(
+            lat=10.0, lon=20.0, start="2023-01-01 00:00", end="2023-01-01 02:00", params=params
+        )
+        assert m.call_count == 1
+        assert len(df1) == 3
+        assert df1["T2M"].tolist() == [8.0, 8.5, 9.0]
+
+        # 2. Second Call - Should hit Cache and return same correct sliced range
+        df2 = client.get_point_data(
+            lat=10.0, lon=20.0, start="2023-01-01 00:00", end="2023-01-01 02:00", params=params
+        )
+        assert m.call_count == 1  # No extra call
+        pd.testing.assert_frame_equal(df1, df2)
+

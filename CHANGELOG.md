@@ -16,6 +16,7 @@ All changes to `aidweather` are documented here.
 - Stopped tracking generated example run artifacts under `outputs/`.
 - Added CI workflows for publishing to TestPyPI (`publish-testpypi.yml`, manual trigger)
   and PyPI (`publish.yml`, triggered by GitHub Releases) via trusted publishing (OIDC).
+- Removed unreleased dependency `aidviz` from `pyproject.toml` and consolidated all example-specific dependencies into a helper script `examples/install_examples_deps.sh`.
 
 ## [0.1.1] — 2026-06-25
 

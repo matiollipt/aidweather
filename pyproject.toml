@@ -35,7 +35,6 @@ dependencies = [
     "typer>=0.12.0,<1",
     "pyarrow>=15.0.0,<25",
     "platformdirs>=3.0.0,<5",
-    "aidviz",
 ]
 
 [project.optional-dependencies]
@@ -77,6 +76,3 @@ python_version = "3.10"
 packages = ["aidweather"]
 ignore_missing_imports = true
 warn_unused_configs = true
-
-[tool.uv.sources]
-aidviz = { path = "../aidviz", editable = true }

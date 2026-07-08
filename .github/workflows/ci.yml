@@ -24,6 +24,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[test]"
+          python -m pip install ruff mypy
+
+      - name: Run linter and type checks
+        run: |
+          ruff check src/ tests/
+          mypy src/aidweather
 
       - name: Run tests
         run: pytest -q

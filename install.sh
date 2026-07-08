@@ -208,7 +208,11 @@ if [ "$USE_UV_TOOL" = true ]; then
     fi
 else
     info "Installing package"
-    pip_install -e .
+    if [ "$DEV_MODE" = true ]; then
+        pip_install -e .
+    else
+        pip_install .
+    fi
 fi
 
 # Developer tools

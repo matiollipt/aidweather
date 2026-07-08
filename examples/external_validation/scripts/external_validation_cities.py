@@ -43,7 +43,11 @@ try:
 except NameError:
     IS_NOTEBOOK = False
 
-_SCRIPT_DIR = pathlib.Path(__file__).resolve().parent if not IS_NOTEBOOK else pathlib.Path(".").resolve()
+_SCRIPT_DIR = (
+    pathlib.Path(__file__).resolve().parent
+    if not IS_NOTEBOOK
+    else pathlib.Path(".").resolve()
+)
 if _SCRIPT_DIR.name in ("scripts", "notebooks"):
     _VALIDATION_DIR = _SCRIPT_DIR.parent
 else:
@@ -518,7 +522,7 @@ for src_name, cols in sources.items():
             df_src = city_df[cols].copy()
             df_src["city"] = city_key
             src_dfs.append(df_src)
-            
+
     if src_dfs:
         df_src_all = pd.concat(src_dfs).sort_index()
         df_src_all.index.name = "date"
@@ -543,7 +547,8 @@ for src_name, cols in sources.items():
 # - **Impact of Variance & Outliers**: High MAE and RMSE in interpolated datasets (like Meteostat or Open-Meteo) mean that models trained on ground-truth stations will face noisy, out-of-distribution features at inference time in remote regions.
 # - **Consistency is Key**: NASA POWER (AidWeather) serves as a stable, globally consistent grid. Even if it carries a slight regional bias (which a supervised model can easily learn and correct), it maintains a uniform structure and lacks the station-level anomalies (failures, moves, equipment swaps) of interpolated local sources.
 #
-# # %%
+
+# %%
 if not all_metrics:
     raise RuntimeError("No validation metrics were computed. Check data sources.")
 
