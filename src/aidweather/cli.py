@@ -14,7 +14,7 @@ from rich.console import Console
 from rich.table import Table
 
 from aidweather import __version__
-from aidweather.client import PowerClient
+from aidweather.client import AmbiguousDateError, PowerClient, parse_date_strict
 from aidweather.config import cfg
 from aidweather.geo import GeoCoordinate
 
@@ -58,6 +58,15 @@ def _print_preview(df: pd.DataFrame, n: int = 5) -> None:
     console.print(table)
 
 
+def _print_failed_points(failed: list[tuple[Any, str]], limit: int = 5) -> None:
+    """Prints the points that failed to fetch, along with their error reasons."""
+    console.print(f"[yellow]Warning: {len(failed)} point(s) failed to fetch:[/yellow]")
+    for point, error in failed[:limit]:
+        console.print(f"  [yellow]•[/yellow] {point}: {error}")
+    if len(failed) > limit:
+        console.print(f"  ... and {len(failed) - limit} more.")
+
+
 def _version_callback(value: bool) -> None:
     if value:
         console.print(f"aidweather {__version__}")
@@ -82,7 +91,9 @@ def main(
 def _parse_date(date_str: str) -> str:
     """Parse date and return in YYYYMMDD format."""
     try:
-        return pd.to_datetime(date_str).strftime("%Y%m%d")
+        return parse_date_strict(date_str).strftime("%Y%m%d")
+    except AmbiguousDateError as e:
+        raise typer.BadParameter(str(e)) from e
     except Exception as e:
         raise typer.BadParameter(
             f"Invalid date: '{date_str}'. Expected format like YYYY-MM-DD."
@@ -331,7 +342,7 @@ def fetch_multi(  # noqa: PLR0913
 
     try:
         client = PowerClient(temporal_api=cast(Literal["daily", "hourly"], resolution))
-        df, _failed = client.get_multi_point_data(
+        df, failed = client.get_multi_point_data(
             points=points,
             start=parsed_start,
             end=parsed_end,
@@ -341,6 +352,9 @@ def fetch_multi(  # noqa: PLR0913
     except Exception as e:
         console.print(f"[bold red]Error fetching multi-point data:[/bold red] {e}")
         raise typer.Exit(code=1) from e
+
+    if failed:
+        _print_failed_points(failed)
 
     if df.empty:
         console.print(

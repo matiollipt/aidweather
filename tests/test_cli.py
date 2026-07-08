@@ -107,6 +107,22 @@ def test_fetch_invalid_date():
     assert "Invalid date" in result.output
 
 
+def test_fetch_ambiguous_slash_date():
+    """Slash-separated dates are rejected rather than silently misread as month/day."""
+    result = runner.invoke(
+        app,
+        [
+            "fetch",
+            "--lat", "-15.0",
+            "--lon", "-47.0",
+            "--start", "05/03/2023",
+            "--end", "2023-12-31",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "Ambiguous date" in result.output
+
+
 def test_fetch_multi_missing_file(tmp_path):
     """Test 'fetch-multi' with a non-existent file."""
     result = runner.invoke(
@@ -292,6 +308,42 @@ def test_fetch_multi_success(mock_client_class, tmp_path):
     assert result.exit_code == 0
     assert "Data saved to" in result.stdout
     assert output_json.exists()
+
+
+@patch("aidweather.cli.PowerClient")
+def test_fetch_multi_partial_failure_shows_reason(mock_client_class, tmp_path):
+    """When some points fail, the CLI must show why, not just a generic 'no data' message."""
+    points_csv = tmp_path / "points.csv"
+    points_csv.write_text("""lat,lon
+12.3,45.6
+-12.3,-45.6""")
+
+    mock_client = mock_client_class.return_value
+    dummy_df = pd.DataFrame(
+        {"lat": [12.3], "lon": [45.6], "T2M": [15.0]},
+        index=pd.to_datetime(["2023-01-01"]),
+    )
+    dummy_df.index.name = "date"
+    mock_client.get_multi_point_data.return_value = (
+        dummy_df,
+        [({"lat": -12.3, "lon": -45.6}, "simulated API failure")],
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "fetch-multi",
+            "--points-file",
+            str(points_csv),
+            "--start",
+            "2023-01-01",
+            "--end",
+            "2023-01-01",
+            "--no-preview",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "simulated API failure" in result.stdout
 
 
 @patch("aidweather.cli.PowerClient")

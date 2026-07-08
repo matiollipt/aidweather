@@ -107,6 +107,33 @@ def test_get_multi_point_data_success(mock_session):
     assert df["lat"].nunique() == 2
 
 
+def test_collect_futures_results_reports_failure_reason():
+    """Failed points must carry the actual error, not just the point identity, so
+    callers (and the CLI) can tell a real failure apart from "no data available"."""
+    from concurrent.futures import Future
+
+    ok_df = pd.DataFrame({"T2M": [1.0]}, index=pd.to_datetime(["2023-01-01"]))
+    ok_df.index.name = "date"
+    ok_future: Future = Future()
+    ok_future.set_result(ok_df)
+
+    bad_future: Future = Future()
+    bad_future.set_exception(RuntimeError("simulated API failure"))
+
+    ok_point = {"lat": 1.0, "lon": 2.0}
+    bad_point = {"lat": 3.0, "lon": 4.0}
+
+    results, failed = PowerClient._collect_futures_results(
+        {ok_future: ok_point, bad_future: bad_point}
+    )
+
+    assert len(results) == 1
+    assert len(failed) == 1
+    point, error = failed[0]
+    assert point == bad_point
+    assert "simulated API failure" in error
+
+
 def test_get_regional_data_success(mock_session):
     """Verify regional bounding box requests are correctly dispatched and parsed."""
     mock_session.get(

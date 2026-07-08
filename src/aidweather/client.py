@@ -40,6 +40,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -142,6 +143,25 @@ def _session_with_retries(
 
 # Configure logging for the module
 logger = logging.getLogger(__name__)
+
+_AMBIGUOUS_SLASH_DATE_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{2,4}$")
+
+
+class AmbiguousDateError(ValueError):
+    """Raised when a date string's day/month order cannot be inferred safely."""
+
+
+def parse_date_strict(date_value: Any) -> pd.Timestamp:
+    """Parses a date, rejecting slash-separated strings (e.g. "05/03/2023")
+    since NASA POWER's day-first users and pandas' month-first default would
+    silently disagree on which is the day and which is the month.
+    """
+    if isinstance(date_value, str) and _AMBIGUOUS_SLASH_DATE_RE.match(date_value.strip()):
+        raise AmbiguousDateError(
+            f"Ambiguous date '{date_value}': day/month order is not clear from "
+            "a slash-separated date. Use an unambiguous format instead, e.g. YYYY-MM-DD."
+        )
+    return pd.to_datetime(date_value)
 
 
 def _make_cache_key(payload: dict[str, Any], temporal_api: str = "daily") -> str:
@@ -677,8 +697,8 @@ class PowerClient:
             )
 
         # Validate date range
-        start_dt = pd.to_datetime(start)
-        end_dt = pd.to_datetime(end)
+        start_dt = parse_date_strict(start)
+        end_dt = parse_date_strict(end)
         if start_dt > end_dt:
             raise ValueError("start date must be before or equal to end date")
 
@@ -756,7 +776,7 @@ class PowerClient:
         Returns:
             The formatted date string (e.g., "YYYYMMDD" or "YYYYMMDDHH").
         """
-        dt = pd.to_datetime(date_str).to_pydatetime()
+        dt = parse_date_strict(date_str).to_pydatetime()
         return dt.strftime("%Y%m%d")
 
     def _validate_request(self, params: list[str], is_regional: bool = False) -> None:
@@ -1105,8 +1125,8 @@ class PowerClient:
         )
         df = self._fetch_data(payload)
         if df.empty:
-            req_start = pd.to_datetime(start)
-            req_end = pd.to_datetime(end)
+            req_start = parse_date_strict(start)
+            req_end = parse_date_strict(end)
             date_range = pd.date_range(
                 start=req_start,
                 end=req_end,
@@ -1115,8 +1135,8 @@ class PowerClient:
             return pd.DataFrame(np.nan, index=date_range, columns=params)
 
         df = _ensure_all_params_in_df(df, params)
-        req_start = pd.to_datetime(start)
-        req_end = pd.to_datetime(end)
+        req_start = parse_date_strict(start)
+        req_end = parse_date_strict(end)
         return _filter_df_by_date(df, req_start, req_end)
 
     # ------------------------------------------------------------------
@@ -1186,7 +1206,8 @@ class PowerClient:
     def _collect_futures_results(
         future_to_point: dict,
     ) -> tuple[list[pd.DataFrame], list]:
-        """Collects completed futures into result DataFrames and failed list."""
+        """Collects completed futures into result DataFrames and a list of
+        ``(point, error_message)`` pairs for points whose fetch raised."""
         all_results: list[pd.DataFrame] = []
         failed_points: list = []
 
@@ -1213,7 +1234,7 @@ class PowerClient:
                 all_results.append(df)
             except Exception as e:
                 logger.warning(f"Failed to fetch data for point {point}: {e}")
-                failed_points.append(point)
+                failed_points.append((point, str(e)))
 
         return all_results, failed_points
 
@@ -1230,7 +1251,12 @@ class PowerClient:
         _validate: bool = True,
     ) -> tuple[
         pd.DataFrame,
-        list[dict[str, Any] | tuple[float, float] | tuple[float, float, float]],
+        list[
+            tuple[
+                dict[str, Any] | tuple[float, float] | tuple[float, float, float],
+                str,
+            ]
+        ],
     ]:
         """Fetches data for multiple geographic points in parallel.
 
@@ -1244,7 +1270,8 @@ class PowerClient:
             _validate: Whether to validate inputs.
 
         Returns:
-            A tuple containing (combined DataFrame, list of failed points).
+            A tuple containing (combined DataFrame, list of ``(point, error_message)``
+            pairs for any points whose fetch failed).
         """
         if _validate:
             self._validate_inputs(params, start, end)
@@ -1675,8 +1702,10 @@ class PowerClient:
         )
 
         if df.empty and failed_points:
+            sample_errors = ", ".join(dict.fromkeys(err for _, err in failed_points[:3]))
             raise OSError(
-                f"Failed to fetch data for all {len(failed_points)} transect points."
+                f"Failed to fetch data for all {len(failed_points)} transect points: "
+                f"{sample_errors}"
             )
 
         return df

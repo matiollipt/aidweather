@@ -250,7 +250,7 @@ When publishing analyses based on data retrieved with `aidweather`, cite NASA PO
 Suggested acknowledgement:
 
 ```text
-Weather and solar data were obtained from the NASA POWER Project using aidweather v0.1.2.
+Weather and solar data were obtained from the NASA POWER Project using aidweather v0.1.3.
 ```
 
 ## License

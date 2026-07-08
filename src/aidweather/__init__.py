@@ -22,7 +22,7 @@ License:
     Distributed under the Apache-2.0 license.
 """
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 __author__ = "Cleverson Matiolli"
 __url__ = "https://github.com/matiollipt/aidweather"
 

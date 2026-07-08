@@ -4,6 +4,23 @@ All changes to `aidweather` are documented here.
 
 ---
 
+## [0.1.3] — 2026-07-08
+
+### Bug Fixes
+
+- **Ambiguous slash-separated dates are now rejected instead of silently misread.**
+  `--start`/`--end` (CLI) and `start`/`end` (Python API) previously went through
+  `pandas.to_datetime` with its default month-first convention, so a date like
+  `05/03/2023` was silently read as May 3rd rather than March 5th — a real risk for
+  Brazil-first users typing day-first dates. These now raise a clear error asking for
+  an unambiguous format (e.g. `YYYY-MM-DD`).
+- **Multi-point and transect fetch failures no longer disappear behind a generic "no
+  data" message.** `get_multi_point_data`'s `failed_points` return value now carries
+  `(point, error_message)` pairs instead of bare points, and the CLI's `fetch-multi`
+  command (which previously discarded this value entirely) now prints the actual
+  reason for each failed point. `get_transect_data` likewise includes a sample of the
+  underlying errors when every point in a transect fails.
+
 ## [0.1.2] — 2026-07-01
 
 ### Release Engineering

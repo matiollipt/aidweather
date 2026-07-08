@@ -3,8 +3,28 @@ from unittest.mock import patch
 
 import pytest
 
-from aidweather.client import PowerClient
+from aidweather.client import AmbiguousDateError, PowerClient, parse_date_strict
 from aidweather.geo import GeoCoordinate
+
+
+@pytest.mark.parametrize("date_str", ["05/03/2023", "31/01/2023", "1/1/2023"])
+def test_parse_date_strict_rejects_slash_dates(date_str):
+    """Slash-separated dates are ambiguous (day-first vs month-first) and must be rejected."""
+    with pytest.raises(AmbiguousDateError, match="Ambiguous date"):
+        parse_date_strict(date_str)
+
+
+@pytest.mark.parametrize("date_str", ["2023-03-05", "20230305"])
+def test_parse_date_strict_accepts_iso_dates(date_str):
+    """Unambiguous ISO-style dates parse without complaint."""
+    assert parse_date_strict(date_str).strftime("%Y-%m-%d") == "2023-03-05"
+
+
+def test_validate_inputs_rejects_ambiguous_dates():
+    """The Python API's own validation path also rejects slash dates, not just the CLI."""
+    client = PowerClient()
+    with pytest.raises(AmbiguousDateError):
+        client._validate_inputs(["T2M"], "05/03/2023", "2023-12-31")
 
 
 def test_hourly_point_limit():

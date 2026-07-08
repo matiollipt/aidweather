@@ -109,7 +109,7 @@ df, failed = client.get_multi_point_data(
 )
 ```
 
-Returns a combined DataFrame with `lat` and `lon` columns added, plus a list of any points that failed. A `name` column is added too, but only for points that provided one — plain `(lat, lon)` tuples produce no `name` column.
+Returns a combined DataFrame with `lat` and `lon` columns added, plus a list of `(point, error_message)` pairs for any points that failed, so you can see *why* each one failed rather than just that it did. A `name` column is added too, but only for points that provided one — plain `(lat, lon)` tuples produce no `name` column.
 
 > [!NOTE]
 > The client defaults `max_workers` to `5` and automatically clamps higher values to protect the NASA POWER service. A client-side sliding-window rate limiter is also active by default at 30 requests per minute.
