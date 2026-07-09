@@ -1,8 +1,6 @@
 # PowerClient
 
-`PowerClient` is a cache-based client for fetching meteorological and solar energy data from NASA's POWER API. Give it a location, a date range, and a list of parameters, and it returns a clean pandas DataFrame.
-
-It handles caching, retries, and parallel fetching for you. The client does not override NASA POWER API service limits, attribution requirements, or usage policies.
+`PowerClient` fetches meteorological and solar energy data from NASA's POWER API and returns a `pandas` DataFrame indexed by date. It handles caching, retries, and parallel requests. API service limits, attribution requirements, and usage policies are not overridden.
 
 ---
 

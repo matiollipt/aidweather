@@ -1,6 +1,6 @@
 # Configuration
 
-`aidweather` loads its settings from a bundled `assets/config.json` file. Sensible defaults are in place, but you can override values when needed (e.g. if you want to change the default location of the cache).
+`aidweather` loads its settings from a bundled `assets/config.json` file. Cache location, logging path, and rate limits can be overridden via environment variables or programmatically via the `cfg` singleton.
 
 For a complete list of config objects and accessors, see the
 [API Inventory](api_inventory.md#aidweatherconfig).

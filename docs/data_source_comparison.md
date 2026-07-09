@@ -57,18 +57,17 @@ The [Decision guide](#decision-guide) at the end translates these characteristic
 
 ### The library
 
-`aidweather` is a Python library that wraps the NASA POWER REST API with a local SQLite cache, retry logic, and coordinate normalization. It is part of the `aidbio` toolchain and is specifically designed for agricultural and environmental pipelines.
+`aidweather` wraps the NASA POWER REST API with a local SQLite cache, retry logic, and coordinate normalization.
 
-Key capabilities:
+Supported query types:
 
-- **Single-point queries** — daily or hourly data for one lat/lon.
-- **Multi-point batch queries** — fetches dozens of sites in parallel with concurrency control.
-- **Spatial transects** — evenly-spaced points along a straight-line path between two endpoints.
-- **Regional grid queries** — returns data for every 0.5° cell within a bounding box (up to 4.5° × 4.5°).
-- **Smart caching** — results are stored in a shared SQLite database compressed with gzip. Repeated queries for the same location are served from disk instantly, with zero new API requests.
-- **Interval splitting** — if you previously cached Jan–Jun and now request Jan–Dec, only Jul–Dec is fetched from the API.
-- **Rate limiting** — a client-side sliding window rate limiter caps requests at 30/minute (configurable), protecting the NASA service and your IP.
-- **Clean output** — returns a `pandas` DataFrame with a timezone-naive `DatetimeIndex` and numeric columns. NASA's `-999` fill values are coerced to standard `NaN`.
+- Single-point queries — daily or hourly data for one lat/lon.
+- Multi-point batch queries — fetches multiple sites in parallel with concurrency control.
+- Spatial transects — evenly-spaced points along a straight-line path between two endpoints.
+- Regional grid queries — data for every 0.5° cell within a bounding box (up to 4.5° × 4.5°).
+- Interval splitting — if Jan–Jun is cached and Jan–Dec is requested, only Jul–Dec is fetched from the API.
+- Client-side rate limiting — caps requests at 30/minute (configurable), with retry-with-backoff for HTTP 429.
+- Output — a `pandas` DataFrame with a timezone-naive `DatetimeIndex`; NASA `-999` fill values become `NaN`.
 
 See the [Client documentation](client.md) for the full API reference.
 
@@ -301,7 +300,3 @@ If your site passes these thresholds, NASA POWER data from `aidweather` is fit f
 
 > [!NOTE]
 > These thresholds are pragmatic guidelines for agricultural modeling, not universal scientific standards. The appropriate tolerance depends on your specific application — crop yield models, for example, are more sensitive to temperature biases than rainfall trend analyses.
-
----
-
-*More data sources will be added to this comparison as they are validated against the `aidweather` workflow. Candidates include CHIRPS (precipitation-only).*

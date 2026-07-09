@@ -52,17 +52,17 @@ All POWER temporal APIs default to **Local Solar Time (LST)**, not civil local t
 
 ---
 
-## How aidweather keeps requests responsible
+## Request behavior
 
-**Local SQLite cache** — every response is stored locally and reused on the next request for the same location and parameter set. This is the single most effective way to reduce API load.
+**Local SQLite cache** — responses are stored locally and reused on subsequent requests for the same location and parameter set. Cache hits produce no API traffic.
 
-**Retry with backoff** — transient failures (HTTP 429, 50x) are retried automatically with exponential backoff rather than hammering the server.
+**Retry with backoff** — transient failures (HTTP 429, 50x) are retried with exponential backoff.
 
-**Explicit User-Agent** — the client identifies itself (`aidweather/version`) in every request, which is good upstream citizenship and helps NASA track usage patterns.
+**User-Agent header** — the client identifies itself as `aidweather/<version>` in every request.
 
-**Parameter-count validation** — requests that would violate API limits are rejected before they hit the network.
+**Parameter-count validation** — requests that would exceed API limits are rejected before any network call is made.
 
-**Point and regional endpoints are separate** — different validation rules apply to each, and keeping them separate prevents accidental misuse.
+**Point and regional endpoints are separate** — different validation rules apply to each.
 
 ---
 

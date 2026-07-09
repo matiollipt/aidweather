@@ -1,8 +1,7 @@
 # API Inventory
 
-This page is the complete inventory of classes and functions currently defined in
-`src/aidweather`. It's here for anyone who wants a reliable mental map of the package
-without having to guess from the source.
+This page is the complete inventory of classes and functions defined in
+`src/aidweather`, for anyone who wants a quick overview without reading the source.
 
 Names starting with `_` are implementation details. They are documented here for
 transparency, debugging, and automated code navigation, but they are not stable

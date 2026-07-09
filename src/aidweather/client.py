@@ -1,37 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """
-aidweather
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+aidweather.client
+~~~~~~~~~~~~~~~~~
 
-This module provides the `PowerClient`, a cache-based client for fetching
-meteorological and solar energy data from NASA's POWER API.
+NASA POWER API client with SQLite caching and retry logic.
 
-The `PowerClient` is designed as a lightweight API wrapper to fetch, validate, and parse
-daily and hourly environmental variables. It utilizes a local SQLite cache to avoid redundant
-requests and a basic retry loop to manage network transient dropouts.
-
-Please note that this client is bound by NASA POWER API service limits. Standard IP requests
-without a registered key or using DEMO_KEY may be rate-limited, and requests are restricted
-to a maximum of 20 daily or 15 hourly parameters. Regional bounding-box requests only
-support single-parameter downloads and a maximum area of 4.5° x 4.5° at this time.
-
-Key Features:
-- Wrapper for NASA's daily and hourly API endpoints.
-- Local SQLite cache to persist requested spatial-temporal ranges.
-- Retry logic using backoff algorithms for transient network failures.
-- Parallel request utilities using safe concurrency levels to prevent IP blocks.
-
-Example:
-    >>> from aidweather.client import PowerClient
-    >>> client = PowerClient(temporal_api="daily")
-    >>> weather_data = client.get_point_data(
-    ...     lat=-48.82,
-    ...     lon=-21.77,
-    ...     start="20220101",
-    ...     end="20220131",
-    ...     params=["T2M", "WS2M"]
-    ... )
-    >>> print(weather_data.head())
+Exposes ``PowerClient`` for fetching daily and hourly meteorological data from
+the POWER point and regional endpoints. Caches responses locally by request
+hash to avoid redundant network calls.
 """
 from __future__ import annotations
 
@@ -66,7 +42,7 @@ from aidweather.geo import GeoCoordinate
 
 
 class RateLimiter:
-    """Thread-safe sliding window rate limiter."""
+    """Thread-safe sliding-window rate limiter."""
 
     def __init__(self, max_calls: int, period: float) -> None:
         self.max_calls = max_calls
@@ -106,20 +82,7 @@ def _session_with_retries(
     backoff_factor: float = 0.5,
     status_forcelist: Sequence[int] = (429, 500, 502, 503, 504),
 ) -> requests.Session:
-    """Creates a `requests.Session` configured with automatic retries on failures.
-
-    This helper function sets up a session with a `Retry` strategy, making HTTP
-    requests more resilient to transient network issues or temporary server errors.
-    It uses an exponential backoff algorithm between retries.
-
-    Args:
-        total: The total number of retries to attempt.
-        backoff_factor: A factor to calculate the delay between retries.
-        status_forcelist: A set of HTTP status codes that should trigger a retry.
-
-    Returns:
-        A `requests.Session` object with the retry mechanism mounted.
-    """
+    """Return a ``requests.Session`` with a ``Retry`` adapter mounted on both http and https."""
     # Added read, connect, status retries to total retries
     retry = Retry(
         total=total,
@@ -148,7 +111,7 @@ _AMBIGUOUS_SLASH_DATE_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{2,4}$")
 
 
 class AmbiguousDateError(ValueError):
-    """Raised when a date string's day/month order cannot be inferred safely."""
+    """Raised when a date string's day/month order cannot be determined."""
 
 
 def parse_date_strict(date_value: Any) -> pd.Timestamp:
@@ -156,7 +119,9 @@ def parse_date_strict(date_value: Any) -> pd.Timestamp:
     since NASA POWER's day-first users and pandas' month-first default would
     silently disagree on which is the day and which is the month.
     """
-    if isinstance(date_value, str) and _AMBIGUOUS_SLASH_DATE_RE.match(date_value.strip()):
+    if isinstance(date_value, str) and _AMBIGUOUS_SLASH_DATE_RE.match(
+        date_value.strip()
+    ):
         raise AmbiguousDateError(
             f"Ambiguous date '{date_value}': day/month order is not clear from "
             "a slash-separated date. Use an unambiguous format instead, e.g. YYYY-MM-DD."
@@ -165,19 +130,7 @@ def parse_date_strict(date_value: Any) -> pd.Timestamp:
 
 
 def _make_cache_key(payload: dict[str, Any], temporal_api: str = "daily") -> str:
-    """Creates a deterministic SHA-256 hash from a request payload dictionary.
-
-    This hash is used as a key for caching. The 'start' and 'end' keys are
-    removed from the payload before hashing to ensure that requests for the same
-    location and parameters but different time ranges can share a cache entry.
-
-    Args:
-        payload: The request payload dictionary.
-        temporal_api: The temporal resolution to isolate daily from hourly caches.
-
-    Returns:
-        The SHA-256 hash string.
-    """
+    """Return a deterministic SHA-256 hex digest for *payload*, excluding date keys."""
     key_payload = payload.copy()
     key_payload.pop("start", None)
     key_payload.pop("end", None)
@@ -225,21 +178,7 @@ def _get_date_ranges_to_fetch(
     cached_df: pd.DataFrame | None,
     temporal_api: str,
 ) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
-    """Determines the date ranges that are missing from the cache.
-
-    Compares the requested date range against the range available in the cached
-    DataFrame and returns a list of date range tuples that need to be fetched.
-
-    Args:
-        requested_start: The start of the requested date range.
-        requested_end: The end of the requested date range.
-        cached_df: The DataFrame from the cache, indexed by date.
-        temporal_api: The temporal resolution ("daily" or "hourly"), used to
-            determine the correct time delta.
-
-    Returns:
-        A list of (start, end) tuples representing the date ranges to be fetched.
-    """
+    """Return the date ranges missing from *cached_df* relative to the requested range."""
     if cached_df is None or cached_df.empty:
         return [(requested_start, requested_end)]
 
@@ -263,19 +202,7 @@ def _get_date_ranges_to_fetch(
 def _convert_df_to_cacheable_json(
     df: pd.DataFrame, temporal_api: str
 ) -> dict[str, Any]:
-    """Converts a DataFrame to the JSON-like dictionary format for caching.
-
-    This function reverses the parsing process, transforming a DataFrame back into
-    the nested dictionary structure similar to the original NASA POWER API response.
-    This allows fetched data to be stored in the cache in its native format.
-
-    Args:
-        df: The DataFrame to convert. Must have a DatetimeIndex.
-        temporal_api: The temporal resolution ("daily" or "hourly").
-
-    Returns:
-        A dictionary representing the data in a cacheable format.
-    """
+    """Convert a DataFrame back into the JSON dict format used for cache storage."""
     df_copy = df.copy()
     date_format = "%Y%m%d%H" if temporal_api == "hourly" else "%Y%m%d"
     df_copy.index = df_copy.index.strftime(date_format)
@@ -290,11 +217,7 @@ def _fetch_and_parse(
     payload: dict[str, Any],
     temporal_api: Literal["daily", "hourly"],
 ) -> tuple[pd.DataFrame, int]:
-    """Performs a single API request and parses the JSON response into a DataFrame.
-
-    Returns:
-        A tuple of (DataFrame, byte_count).
-    """
+    """Perform a single GET request and return a ``(DataFrame, byte_count)`` tuple."""
     try:
         resp = session.get(url, params=payload)
 
@@ -319,17 +242,7 @@ def _fetch_and_parse(
 def _merge_and_deduplicate(
     df_list: list[pd.DataFrame],
 ) -> pd.DataFrame:
-    """Concatenates, de-duplicates, and sorts a list of DataFrames.
-
-    The DataFrames are combined, and any duplicate index entries are removed,
-    keeping the first occurrence. The final DataFrame is sorted by its index.
-
-    Args:
-        df_list: A list of DataFrames to merge.
-
-    Returns:
-        A single, merged, and sorted DataFrame.
-    """
+    """Concatenate, deduplicate, and sort a list of DataFrames by index."""
     if not df_list:
         return pd.DataFrame()
 
@@ -350,16 +263,7 @@ def _merge_and_deduplicate(
 def _filter_df_by_date(
     df: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp
 ) -> pd.DataFrame:
-    """Filters a DataFrame to a specific inclusive date range.
-
-    Args:
-        df: The DataFrame to filter, which must have a DatetimeIndex.
-        start: The start date of the filtering range.
-        end: The end date of the filtering range.
-
-    Returns:
-        The filtered DataFrame.
-    """
+    """Return *df* filtered to the inclusive date range [*start*, *end*]."""
     if df.empty:
         return df
     return df.loc[start:end]
@@ -369,17 +273,7 @@ def _filter_df_by_date(
 
 
 def _parse_json_response(resp: requests.Response) -> dict[str, Any]:
-    """Parses JSON from a `requests.Response` object.
-
-    Args:
-        resp: The HTTP response object.
-
-    Returns:
-        The parsed JSON data as a dictionary.
-
-    Raises:
-        ValueError: If the response body cannot be decoded as JSON.
-    """
+    """Parse and return the JSON body of *resp*, raising ``ValueError`` on failure."""
     try:
         return dict(resp.json())
     except json.JSONDecodeError as e:
@@ -392,18 +286,7 @@ def _parse_json_response(resp: requests.Response) -> dict[str, Any]:
 def _response_to_dataframe(
     data: dict[str, Any], temporal_api: Literal["daily", "hourly"]
 ) -> pd.DataFrame:
-    """Parses the raw JSON response from the POWER API into a pandas DataFrame.
-
-    This function extracts the parameter data, formats the date index, and
-    converts fill values (-999) to `pd.NA`.
-
-    Args:
-        data: The parsed JSON data from the API response.
-        temporal_api: The temporal API from which the data was fetched.
-
-    Returns:
-        A cleaned DataFrame with a DatetimeIndex and numeric columns.
-    """
+    """Parse the raw POWER JSON response into a DatetimeIndex DataFrame with fill-value NAs."""
     properties = data.get("properties", {}).get("parameter", {})
     if not properties:
         return pd.DataFrame()
@@ -441,18 +324,7 @@ def _response_to_dataframe(
 
 
 def _ensure_all_params_in_df(df: pd.DataFrame, params: list[str]) -> pd.DataFrame:
-    """Ensures a DataFrame contains all requested parameter columns.
-
-    If a parameter column is missing (e.g., because the API did not return it),
-    it is added to the DataFrame and filled with `pd.NA`.
-
-    Args:
-        df: The DataFrame to check.
-        params: A list of parameter names that should be present.
-
-    Returns:
-        The DataFrame with all required columns.
-    """
+    """Add any missing *params* columns to *df*, filled with ``pd.NA``."""
     for param in params:
         if param not in df.columns:
             df[param] = pd.NA
@@ -460,19 +332,7 @@ def _ensure_all_params_in_df(df: pd.DataFrame, params: list[str]) -> pd.DataFram
 
 
 def _regional_response_to_dataframe(data: dict[str, Any]) -> pd.DataFrame:
-    """Parses a GeoJSON FeatureCollection from the regional API into a DataFrame.
-
-    The NASA POWER regional endpoint returns a GeoJSON response where each
-    Feature represents a 0.5° grid cell with time-series data. This function
-    converts the nested structure into a flat, long-form DataFrame.
-
-    Args:
-        data: The parsed JSON data from the regional API response.
-
-    Returns:
-        A DataFrame with columns: ``date``, ``lat``, ``lon``, ``elevation``,
-        and one column per parameter. Indexed by ``date``.
-    """
+    """Parse a POWER regional GeoJSON FeatureCollection into a long-form DataFrame."""
     features = data.get("features", [])
     if not features:
         return pd.DataFrame()
@@ -579,13 +439,8 @@ __all__ = ["PowerClient"]
 
 
 class PowerClient:
-    """A client for the NASA POWER API with caching and retry mechanisms.
+    """NASA POWER API client with SQLite caching, retry logic, and rate limiting."""
 
-    Attributes:
-        temporal_api: The temporal resolution of the API.
-        session: The session object used for making HTTP requests.
-        db_conn: The connection to the SQLite cache database, if caching is enabled.
-    """
     temporal_api: Literal["daily", "hourly"]
     base_url: str
     regional_base_url: str
@@ -604,16 +459,14 @@ class PowerClient:
         temporal_api: Literal["daily", "hourly"] = "daily",
         session: requests.Session | None = None,
     ):
-        """Initializes the PowerClient and its caching system.
+        """Initialise the client, configure caching, rate limiter, and session.
 
         Args:
-            temporal_api: The temporal API endpoint to use, either "daily" or
-                "hourly".
-            session: An optional `requests.Session` object to use for API calls.
-                If not provided, a new session with retry logic will be created.
+            temporal_api: ``"daily"`` or ``"hourly"``.
+            session: Optional pre-configured session; a retry session is created if omitted.
 
         Raises:
-            ValueError: If `temporal_api` is not one of "daily" or "hourly".
+            ValueError: If *temporal_api* is not ``"daily"`` or ``"hourly"``.
         """
         if temporal_api not in ["daily", "hourly"]:
             raise ValueError("`temporal_api` must be 'daily' or 'hourly'.")
@@ -650,10 +503,10 @@ class PowerClient:
         self.rate_limiter = RateLimiter(rate_limit_calls, rate_limit_period)
 
     def _init_cache_db(self) -> None:
-        """Initializes the SQLite database connection and creates the cache table.
+        """Initialise the SQLite cache database and create the cache table if absent.
 
         Raises:
-            sqlite3.Error: If the database connection or table creation fails.
+            sqlite3.Error: If the connection or table creation fails.
         """
         db_path = ""
         try:
@@ -685,7 +538,7 @@ class PowerClient:
         start: Any,
         end: Any,
     ) -> None:
-        """Validates query inputs (parameters and date ranges)."""
+        """Validate *params* list and date range; warn on unknown parameter codes."""
         # Validate parameters
         known_params = set(cfg.params("all").keys())
         unknown = [p for p in params if p not in known_params]
@@ -703,14 +556,7 @@ class PowerClient:
             raise ValueError("start date must be before or equal to end date")
 
     def _read_from_cache_db(self, key: str) -> pd.DataFrame | None:
-        """Loads and decompresses a response from the SQLite cache.
-
-        Args:
-            key: The cache key for the desired resource.
-
-        Returns:
-            The cached data as a DataFrame, or None if not found or on error.
-        """
+        """Load and decompress a cached DataFrame for *key*, or return ``None`` if missing."""
         if not self.db_conn:
             return None
 
@@ -744,12 +590,7 @@ class PowerClient:
         return None
 
     def _write_to_cache_db(self, key: str, data: dict[str, Any]) -> None:
-        """Compresses and writes a response dictionary to the SQLite cache.
-
-        Args:
-            key: The cache key under which to store the data.
-            data: The JSON-like dictionary data to cache.
-        """
+        """Compress *data* and upsert it into the SQLite cache under *key*."""
         if not self.db_conn:
             return
 
@@ -768,23 +609,12 @@ class PowerClient:
                 logger.warning(f"Could not write to cache for key {key}: {e}")
 
     def _format_date(self, date_str: Any) -> str:
-        """Formats a date into the required API string format.
-
-        Args:
-            date_str: The date to format.
-
-        Returns:
-            The formatted date string (e.g., "YYYYMMDD" or "YYYYMMDDHH").
-        """
+        """Format *date_str* into the ``YYYYMMDD`` string required by the API."""
         dt = parse_date_strict(date_str).to_pydatetime()
         return dt.strftime("%Y%m%d")
 
     def _validate_request(self, params: list[str], is_regional: bool = False) -> None:
-        """Validates NASA POWER API constraints.
-
-        Raises:
-            ValueError: If the requested parameters exceed the API's limits.
-        """
+        """Raise ``ValueError`` if *params* exceed the NASA POWER API limits for the active endpoint."""
         num_params = len(params)
         if is_regional:
             if self.temporal_api == "hourly":
@@ -819,21 +649,7 @@ class PowerClient:
         wind_elevation: float | None = None,
         wind_surface: float | None = None,
     ) -> dict[str, Any]:
-        """Constructs the payload dictionary for a single point API request.
-
-        Args:
-            params: List of POWER parameters to request.
-            start: The start date in a format parsable by `_format_date`.
-            end: The end date in a format parsable by `_format_date`.
-            lon: The longitude of the point.
-            lat: The latitude of the point.
-            elevation: The site elevation in meters.
-            wind_elevation: The wind elevation in meters (10 to 300).
-            wind_surface: The wind surface parameter.
-
-        Returns:
-            The constructed payload dictionary.
-        """
+        """Build and return the query payload dict for a single-point API request."""
         self._validate_request(params, is_regional=False)
         payload = {
             "parameters": ",".join(params),
@@ -866,26 +682,10 @@ class PowerClient:
         lon_min: float,
         lon_max: float,
     ) -> dict[str, Any]:
-        """Constructs the payload dictionary for a regional (bounding-box) API request.
-
-        The NASA POWER regional endpoint expects a geographic bounding box defined
-        by four edge coordinates. The box must not exceed 4.5° on either axis.
-
-        Args:
-            params: List of POWER parameters to request (max 1 for regional).
-            start: The start date in a format parsable by ``_format_date``.
-            end: The end date in a format parsable by ``_format_date``.
-            lat_min: Southern edge of the bounding box (latitude).
-            lat_max: Northern edge of the bounding box (latitude).
-            lon_min: Western edge of the bounding box (longitude).
-            lon_max: Eastern edge of the bounding box (longitude).
-
-        Returns:
-            The constructed payload dictionary.
+        """Build the payload dict for a regional bounding-box request.
 
         Raises:
-            ValueError: If the bounding box exceeds 4.5° on either axis,
-                or if min >= max for latitude or longitude.
+            ValueError: If the bounding box exceeds 4.5° on either axis or min ≥ max.
         """
         self._validate_request(params, is_regional=True)
 
@@ -927,16 +727,7 @@ class PowerClient:
         base_payload: dict[str, Any],
         url: str,
     ) -> list[pd.DataFrame]:
-        """Iterates through a list of date ranges and fetches data for each.
-
-        Args:
-            ranges: A list of (start, end) tuples representing the date ranges to fetch.
-            base_payload: The base request payload.
-            url: The API endpoint URL.
-
-        Returns:
-            A list of DataFrames, one for each successfully fetched date range.
-        """
+        """Fetch each date range in *ranges* against *base_payload* and return a list of DataFrames."""
         newly_fetched_dfs: list[pd.DataFrame] = []
         if not ranges:
             return newly_fetched_dfs
@@ -964,15 +755,7 @@ class PowerClient:
     def _fetch_data(
         self, base_payload: dict[str, Any], url: str | None = None
     ) -> pd.DataFrame:
-        """Orchestrates the full data fetching and caching logic.
-
-        Args:
-            base_payload: The base payload for the API request.
-            url: The specific API URL to use.
-
-        Returns:
-            A DataFrame containing the requested data.
-        """
+        """Orchestrate cache lookup, gap fetching, merge, and cache update for *base_payload*."""
         self._metrics["total_requests"] += 1
         fetch_url = url or self.base_url
         use_cache = self.cache_cfg.get("enabled", False) and self.db_conn
@@ -1057,15 +840,7 @@ class PowerClient:
         request: PointRequest | None = None,
         **kwargs,
     ) -> pd.DataFrame:
-        """Fetches data for a single geographic point.
-
-        Args:
-            request: Configuration object.
-            **kwargs: Configuration parameters as keyword arguments.
-
-        Returns:
-            A DataFrame containing the time-series data for the specified point.
-        """
+        """Fetch time-series data for a single geographic point."""
         if request is None:
             request = PointRequest(**kwargs)
 
@@ -1091,21 +866,7 @@ class PowerClient:
         wind_surface: float | None = None,
         _validate: bool = True,
     ) -> pd.DataFrame:
-        """Fetches data for a single point using a `GeoCoordinate` object.
-
-        Args:
-            coord: A `GeoCoordinate` object representing the point.
-            start: The start date for the data query (e.g., "YYYYMMDD").
-            end: The end date for the data query (e.g., "YYYYMMDD").
-            params: A list of POWER API parameter names to fetch.
-            elevation: The elevation of the site in meters.
-            wind_elevation: The wind elevation in meters (10 to 300).
-            wind_surface: The wind surface parameter.
-            _validate: Whether to validate inputs.
-
-        Returns:
-            A DataFrame containing the time-series data, indexed by date.
-        """
+        """Fetch time-series data for a single point given a ``GeoCoordinate``."""
         if _validate:
             self._validate_inputs(params, start, end)
 
@@ -1258,20 +1019,10 @@ class PowerClient:
             ]
         ],
     ]:
-        """Fetches data for multiple geographic points in parallel.
+        """Fetch data for multiple geographic points in parallel.
 
-        Args:
-            points: A list of points, where each point is a tuple of (latitude,
-                longitude) or (latitude, longitude, elevation), or a DataFrame.
-            start: The start date for the data query.
-            end: The end date for the data query.
-            params: A list of POWER API parameters to fetch.
-            max_workers: The maximum number of concurrent threads to use.
-            _validate: Whether to validate inputs.
-
-        Returns:
-            A tuple containing (combined DataFrame, list of ``(point, error_message)``
-            pairs for any points whose fetch failed).
+        Returns a ``(DataFrame, failed)`` tuple where *failed* is a list of
+        ``(point, error_message)`` pairs for any points whose fetch raised.
         """
         if _validate:
             self._validate_inputs(params, start, end)
@@ -1382,11 +1133,7 @@ class PowerClient:
         return table
 
     def summarize(self, df: pd.DataFrame) -> None:
-        """Prints a rich summary of the retrieved weather data and transfer metrics.
-
-        Args:
-            df: The DataFrame to summarize.
-        """
+        """Print a Rich summary panel with data profile, transfer metrics, and request statistics."""
         console = Console()
         console.print(Panel(self._build_profile_table(df), subtitle="Data Insight"))
         console.print(Panel(self._build_perf_table(), subtitle="Performance"))
@@ -1397,19 +1144,7 @@ class PowerClient:
         self,
         payload: dict[str, Any],
     ) -> pd.DataFrame:
-        """Fetches data from the regional endpoint and parses the GeoJSON response.
-
-        Unlike the point-based ``_fetch_data`` which handles caching and date-range
-        merging, regional requests are always dispatched directly because the
-        response format (GeoJSON FeatureCollection) is fundamentally different.
-
-        Args:
-            payload: The regional request payload.
-
-        Returns:
-            A DataFrame with ``lat``, ``lon``, ``elevation``, and parameter columns,
-            indexed by date.
-        """
+        """Fetch data from the regional endpoint and parse the GeoJSON FeatureCollection response."""
         self._metrics["total_requests"] += 1
         start_time = time.perf_counter()
 
@@ -1456,31 +1191,11 @@ class PowerClient:
         request: RegionalRequest | None = None,
         _validate: bool = True,
     ) -> pd.DataFrame:
-        """Fetches data for a geographic bounding box using the regional API.
-
-        The NASA POWER regional endpoint returns data on a 0.5° × 0.5° grid
-        within the specified bounding box. The box must not exceed 4.5° on
-        either axis, and only one parameter may be requested per call.
-
-        Args:
-            lat_min: Southern edge of the bounding box (latitude).
-            lat_max: Northern edge of the bounding box (latitude).
-            lon_min: Western edge of the bounding box (longitude).
-            lon_max: Eastern edge of the bounding box (longitude).
-            start: The start date for the data query (e.g., ``"20230101"``).
-            end: The end date for the data query (e.g., ``"20230131"``).
-            params: A list containing **one** POWER API parameter.
-            request: Optional ``RegionalRequest`` object. If provided, its
-                fields override the positional arguments.
-            _validate: Whether to validate inputs.
-
-        Returns:
-            A DataFrame with ``lat``, ``lon``, ``elevation`` (when available),
-            and parameter columns, indexed by date.
+        """Fetch data for a geographic bounding box via the regional API.
 
         Raises:
-            ValueError: If the bounding box is too large or more than one
-                parameter is requested.
+            ValueError: If the box exceeds 4.5° on either axis or more than one parameter
+                is requested.
         """
         if request is not None:
             lat_min = request.lat_min
@@ -1513,21 +1228,7 @@ class PowerClient:
         end: str,
         params: list[str],
     ) -> pd.DataFrame:
-        """Convenience helper to call the regional endpoint with two corner coordinates.
-
-        The two ``GeoCoordinate`` objects define the south-west and north-east
-        corners of the bounding box.
-
-        Args:
-            coord_sw: South-west corner of the bounding box.
-            coord_ne: North-east corner of the bounding box.
-            start: The start date for the data query.
-            end: The end date for the data query.
-            params: A list containing **one** POWER API parameter.
-
-        Returns:
-            A DataFrame containing the regional grid data.
-        """
+        """Fetch regional data using two corner ``GeoCoordinate`` objects (SW and NE)."""
         lat_sw, lon_sw = coord_sw.as_decimal()
         lat_ne, lon_ne = coord_ne.as_decimal()
         return self.get_regional_data(
@@ -1551,26 +1252,10 @@ class PowerClient:
         num_points: int | None,
         spacing_km: float | None,
     ) -> int:
-        """Resolves the number of sample points for a transect.
-
-        ``num_points`` takes priority when both arguments are supplied;
-        the effective spacing is then derived and logged as INFO.
-
-        The minimum allowed point spacing is 0.5° (~55 km) to match the
-        NASA POWER grid resolution. Requesting finer spacing would return
-        duplicate data; the count is clamped and an INFO message is emitted.
-
-        Args:
-            start_coord: Starting endpoint of the transect.
-            end_coord: Ending endpoint of the transect.
-            num_points: Explicit number of sample points, or ``None``.
-            spacing_km: Approximate spacing between samples in km, or ``None``.
-
-        Returns:
-            The resolved (and possibly clamped) number of sample points.
+        """Resolve the number of transect sample points from *num_points* or *spacing_km*.
 
         Raises:
-            ValueError: If neither ``num_points`` nor ``spacing_km`` is provided.
+            ValueError: If neither *num_points* nor *spacing_km* is provided.
         """
         # Great-circle distance approximation between the two endpoints
         lat1, lon1 = start_coord.as_decimal()
@@ -1632,28 +1317,11 @@ class PowerClient:
         _validate: bool = True,
         **kwargs,
     ) -> pd.DataFrame:
-        """Generates a 1D transect of points and fetches data for them in parallel.
-
-        Points are distributed evenly along the straight-line path from
-        ``start_coord`` to ``end_coord``.  Sampling density is controlled
-        by ``num_points`` or ``spacing_km`` (see :class:`TransectRequest`).
-        The minimum point spacing is enforced at 0.5° (~55 km) to avoid
-        fetching duplicate data from the same NASA POWER grid cell.
-
-        Args:
-            request: A :class:`TransectRequest` configuration object. When
-                omitted, one is constructed from the keyword arguments.
-            _validate: Whether to validate inputs.
-            **kwargs: Keyword arguments forwarded to :class:`TransectRequest`.
-
-        Returns:
-            A combined DataFrame indexed by date with ``lat``, ``lon``, and
-            one column per requested parameter.
+        """Sample *n* points along a transect and fetch data for each in parallel.
 
         Raises:
-            ValueError: If neither ``num_points`` nor ``spacing_km`` is given,
-                or if the sampling density cannot be resolved.
-            OSError: If fetching data for *all* generated points fails.
+            ValueError: If neither ``num_points`` nor ``spacing_km`` is given.
+            OSError: If fetching data for all generated points fails.
         """
         if request is None:
             request = TransectRequest(**kwargs)
@@ -1685,7 +1353,12 @@ class PowerClient:
             )
             max_workers = limit
 
-        logger.info("Generated %d transect points from %s to %s.", n, request.start_coord, request.end_coord)
+        logger.info(
+            "Generated %d transect points from %s to %s.",
+            n,
+            request.start_coord,
+            request.end_coord,
+        )
 
         points_with_metadata: list[dict[str, Any]] = [
             {"lat": round(p_lat, 4), "lon": round(p_lon, 4), "name": f"Point_{i + 1}"}
@@ -1702,7 +1375,9 @@ class PowerClient:
         )
 
         if df.empty and failed_points:
-            sample_errors = ", ".join(dict.fromkeys(err for _, err in failed_points[:3]))
+            sample_errors = ", ".join(
+                dict.fromkeys(err for _, err in failed_points[:3])
+            )
             raise OSError(
                 f"Failed to fetch data for all {len(failed_points)} transect points: "
                 f"{sample_errors}"
@@ -1721,27 +1396,7 @@ class PowerClient:
         spacing_km: float | None = None,
         max_workers: int = 5,
     ) -> pd.DataFrame:
-        """Convenience wrapper for :meth:`get_transect_data` using two corner coordinates.
-
-        Mirrors the pattern of :meth:`get_regional_data_from_coordinates`.
-        The two ``GeoCoordinate`` objects define the start and end endpoints
-        of the transect.
-
-        Args:
-            coord_a: Starting endpoint of the transect.
-            coord_b: Ending endpoint of the transect.
-            start: Start date for the data query (e.g. ``"20230101"``).
-            end: End date for the data query (e.g. ``"20230131"``).
-            params: List of POWER API parameter names to fetch.
-            num_points: Number of sample points (takes priority over
-                ``spacing_km`` when both are supplied).
-            spacing_km: Approximate spacing between samples in km.
-            max_workers: Thread-pool size for concurrent requests.
-
-        Returns:
-            A combined DataFrame indexed by date with ``lat``, ``lon``, and
-            one column per requested parameter.
-        """
+        """Fetch transect data using two ``GeoCoordinate`` endpoints instead of a ``TransectRequest``."""
         return self.get_transect_data(
             TransectRequest(
                 start_coord=coord_a,
@@ -1759,6 +1414,6 @@ class PowerClient:
         return f"<PowerClient(api='{self.temporal_api}', url='{self.base_url}')>"
 
     def __del__(self) -> None:
-        """Ensures the database connection is closed when the client is destroyed."""
+        """Close the SQLite cache connection."""
         if self.db_conn:
             self.db_conn.close()

@@ -3,23 +3,10 @@
 aidweather.utils
 ~~~~~~~~~~~~~~~~
 
-Cross-cutting DataFrame utilities for the ``aidweather`` package.
+DataFrame date-column utilities.
 
-This module provides a single, focused primitive: ``ensure_date_column``, which robustly finds, parses,
-and standardises a datetime column in a pandas DataFrame.
-
-Core Features:
-- ``ensure_date_column``: Robustly finds a date column by name, from a list
-  of candidate names, or from a DatetimeIndex, and returns a copy with a
-  guaranteed ``datetime64[ns]`` column.
-
-Example:
-    >>> from aidweather.utils import ensure_date_column
-    >>> import pandas as pd
-    >>> df = pd.DataFrame({"obs_date": ["2023-01-01", "2023-06-15"]})
-    >>> cleaned = ensure_date_column(df, name="date", candidates=["obs_date"])
-    >>> print(cleaned["date"].dtype)
-    datetime64[ns]
+Provides ``ensure_date_column``, which locates, parses, and standardises a
+datetime column in a pandas DataFrame by name, candidate list, or DatetimeIndex.
 """
 
 from __future__ import annotations
@@ -91,29 +78,13 @@ def ensure_date_column(
     name: str = "date",
     **kwargs,
 ) -> pd.DataFrame:
-    """Robustly ensures a DataFrame has a datetime column with a specific name.
+    """Ensure *df* has a ``datetime64[ns]`` column named *name*.
 
-    Searches for the column by ``name``, then by any ``candidates``, then
-    falls back to the DataFrame's DatetimeIndex (when ``index_fallback=True``).
-    Returns a copy by default; use ``inplace=True`` to mutate in place.
-
-    Args:
-        df: The input DataFrame.
-        name: The desired final name for the date column.
-        **kwargs: Additional configuration options:
-            inplace: If True, modifies the DataFrame in place.
-            candidates: A list of alternative column names to search for.
-            index_fallback: If True, allows using the DataFrame's index as
-                the date source when no matching column is found.
-            normalize: If True, normalizes the datetime to midnight (default: False).
-            strip_timezone: If True, removes timezone information.
-
-    Returns:
-        The DataFrame with a guaranteed ``datetime64[ns]`` column named
-        ``name``.
+    Searches by *name*, then any *candidates*, then falls back to a
+    DatetimeIndex. Returns a copy by default; pass ``inplace=True`` to mutate.
 
     Raises:
-        ValueError: If no suitable date column can be found.
+        ValueError: If no suitable date source is found.
     """
     opts = DateColumnOptions(
         inplace=kwargs.get("inplace", False),

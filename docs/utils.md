@@ -1,8 +1,6 @@
 # utils — DataFrame date utilities
 
-The `utils` module exists because real-world data is messy. Farm records, sensor exports, and spreadsheets come in with date columns named anything from `"date"` to `"obs_date"` to `"timestamp"`, and sometimes the date isn't a column at all — it's the DataFrame index.
-
-`ensure_date_column` handles all of that in one call and gives back a DataFrame with a clean, timezone-naive `datetime64[ns]` column you can rely on.
+`ensure_date_column` locates, parses, and standardises a datetime column in a pandas DataFrame. It searches by column name, a list of candidates, or the DataFrame's DatetimeIndex, and returns a timezone-naive `datetime64[ns]` column.
 
 For a complete list of utility classes, public helpers, and internal helpers,
 see the [API Inventory](api_inventory.md#aidweatherutils).
@@ -46,9 +44,9 @@ df = ensure_date_column(df, name="date")
 
 ---
 
-## When to use this
+## Merging with PowerClient output
 
-`ensure_date_column` is the recommended way to standardize the time axis before merging `PowerClient` output with your own data. `PowerClient` returns DataFrames indexed by date; calling `ensure_date_column` on your field data makes both sides ready to join.
+`PowerClient` returns DataFrames indexed by date. Use `ensure_date_column` on field data to align the time axis before joining.
 
 ```python
 client = PowerClient(temporal_api="daily")
