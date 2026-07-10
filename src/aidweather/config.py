@@ -7,6 +7,8 @@ loaded from ``config.json``. Falls back to hardcoded defaults if the file is
 missing or malformed.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -15,6 +17,8 @@ from importlib import resources
 from typing import Any
 
 from platformdirs import user_cache_dir, user_log_dir
+
+logger = logging.getLogger(__name__)
 
 # Hardcoded defaults — used only if config.json is absent or unreadable
 _DEFAULT_URLS = {
@@ -37,7 +41,7 @@ def _load_config_dict() -> dict:
         with ref.open("r", encoding="utf-8") as f:
             return dict(json.load(f))
     except (FileNotFoundError, json.JSONDecodeError, AttributeError):
-        logging.warning("Could not load internal config.json. Using defaults.")
+        logger.warning("Could not load internal config.json. Using defaults.")
         return {}
 
 

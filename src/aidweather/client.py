@@ -52,28 +52,38 @@ class RateLimiter:
 
     def acquire(self) -> None:
         """Blocks until a call is allowed under the rate limit."""
+
+        # If no rate limiting is configured, no limiting is applied.
         if self.max_calls <= 0 or self.period <= 0:
             return
 
         while True:
             with self.lock:
+
+                # Record the current time.
                 now = time.time()
+
                 # Clean up calls older than the sliding window period
                 self.calls = [t for t in self.calls if now - t < self.period]
 
+                # If the number of calls within the sliding window is less than the maximum
+                # number of calls allowed, add the current time to the list of calls and return.
                 if len(self.calls) < self.max_calls:
                     self.calls.append(now)
                     return
 
-                # Sleep time calculation
+                # Calculate the time to sleep to respect the rate limit.
                 sleep_time = self.calls[0] + self.period - now
 
+            # Sleep until the next call is allowed
             if sleep_time > 0:
                 time.sleep(sleep_time)
 
 
 # --- Module-level Helpers ---
 
+# The user agent string for requests to the NASA POWER API. It identifies the
+# library as a good citizen and provides contact information in case of issues.
 USER_AGENT = f"aidweather/{__version__} (+https://github.com/matiollipt/aidweather)"
 
 
@@ -439,8 +449,13 @@ __all__ = ["PowerClient"]
 
 
 class PowerClient:
-    """NASA POWER API client with SQLite caching, retry logic, and rate limiting."""
+    """NASA POWER API client with SQLite caching, retry logic, and rate limiting.
 
+    Attributes:
+        temporal_api: The temporal resolution of the API.
+        session: The session object used for making HTTP requests.
+        db_conn: The connection to the SQLite cache database, if caching is enabled.
+    """
     temporal_api: Literal["daily", "hourly"]
     base_url: str
     regional_base_url: str
@@ -775,6 +790,7 @@ class PowerClient:
         cache_key = _make_cache_key(base_payload, self.temporal_api)
 
         def _parse_payload_date(d_str: str, is_end: bool = False) -> pd.Timestamp:
+            """Parses a payload date string (YYYYMMDD or YYYYMMDDHH) to a Timestamp."""
             fmt = "%Y%m%d%H" if len(str(d_str)) == 10 else "%Y%m%d"
             ts = pd.to_datetime(str(d_str), format=fmt)
             if is_end and fmt == "%Y%m%d" and self.temporal_api == "hourly":
