@@ -4,8 +4,10 @@
 > go stale as the code changes. The standing rule in `CLAUDE.md` ("Test Coverage") is what's meant
 > to prevent *new* gaps from accumulating; this file just captures what's already known.
 
-No coverage tooling (`pytest-cov`, `.coveragerc`) is configured, so these gaps were identified by
-manually cross-referencing `tests/` against `src/aidweather/`, not from a coverage report.
+`pytest-cov` is a declared `test` extra in `pyproject.toml` but isn't wired into any documented
+pytest invocation (no `--cov` flags, no `.coveragerc`), so it produces no coverage report. These
+gaps were identified by manually cross-referencing `tests/` against `src/aidweather/`, not from a
+coverage report.
 
 ## `client.py`
 

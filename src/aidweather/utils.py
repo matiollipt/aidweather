@@ -31,6 +31,7 @@ class DateColumnOptions:
 def _find_date_source_column(
     work: pd.DataFrame, name: str, candidates: Iterable[str] | None
 ) -> str | None:
+    """Return the first of *name* or *candidates* present in *work*'s columns, else ``None``."""
     if name in work.columns:
         return name
     if candidates is not None:
@@ -47,6 +48,7 @@ def _coerce_date_column(
     index_fallback: bool,
     candidates: Iterable[str] | None,
 ) -> pd.DataFrame:
+    """Parse *src_col* (or the DatetimeIndex) into *name*, raising if neither is available."""
     if src_col is not None:
         work[src_col] = pd.to_datetime(work[src_col], errors="raise")
         work[name] = work[src_col]
@@ -66,6 +68,7 @@ def _coerce_date_column(
 def _standardize_datetime_column(
     work: pd.DataFrame, name: str, strip_timezone: bool, normalize: bool
 ) -> pd.DataFrame:
+    """Strip timezone info and/or normalize *name* to midnight, per the given flags."""
     if strip_timezone:
         work[name] = work[name].dt.tz_localize(None)
     if normalize:
