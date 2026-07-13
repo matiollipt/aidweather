@@ -57,5 +57,4 @@ In practice, you call `aidweather` once per location and date range, and every l
 ## Related documentation
 
 - [Client documentation](client.md) — complete `PowerClient` API reference.
-- [Data Source Comparison](data_source_comparison.md) — when to use NASA POWER vs. Meteostat and other alternatives.
 - [NASA POWER License & Usage](aidweather_nasa_power_usage.md) — API limits, rate limiting, licensing, attribution, and responsible use.

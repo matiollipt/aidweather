@@ -9,7 +9,6 @@
 
 > [!IMPORTANT]
 > **NASA POWER Compliance:** Review the [License, Usage & API Guardrails](docs/aidweather_nasa_power_usage.md) guide.
-> **Choosing a data source:** See the [Data Source Comparison](docs/data_source_comparison.md) for a detailed comparison of NASA POWER vs. Meteostat (and future sources), with installation instructions, known limitations, and a decision guide.
 
 ---
 
@@ -23,10 +22,10 @@ curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.
 
 Optional flags passed via `-s --`:
 
-| Flag | Description |
-|---|---|
-| `--dev` | Also install developer tools |
-| `--dev -y` | Developer tools, skip prompts |
+| Flag        | Description                                             |
+| ----------- | ------------------------------------------------------- |
+| `--dev`     | Also install developer tools                            |
+| `--dev -y`  | Developer tools, skip prompts                           |
 | `--uv-tool` | Install globally in an isolated environment via uv tool |
 
 Example:
@@ -62,18 +61,19 @@ uv tool install git+https://github.com/matiollipt/aidweather.git
 
 Optional parameters:
 
-| Parameter | Description |
-|---|---|
-| `-Dev` | Also install developer tools |
-| `-UvTool` | Install globally in an isolated environment via uv tool |
-| `-NoVenv` | Skip venv creation (use active/global Python) |
-| `-VenvPath DIR` | Custom venv path (default: `.venv`) |
-| `-Clean` | Wipe and recreate venv before installing |
-| `-Yes` | Skip confirmation prompts |
+| Parameter       | Description                                             |
+| --------------- | ------------------------------------------------------- |
+| `-Dev`          | Also install developer tools                            |
+| `-UvTool`       | Install globally in an isolated environment via uv tool |
+| `-NoVenv`       | Skip venv creation (use active/global Python)           |
+| `-VenvPath DIR` | Custom venv path (default: `.venv`)                     |
+| `-Clean`        | Wipe and recreate venv before installing                |
+| `-Yes`          | Skip confirmation prompts                               |
 
 ### Local Development
 
 #### Unix/macOS
+
 ```bash
 git clone https://github.com/matiollipt/aidweather.git
 cd aidweather
@@ -81,12 +81,12 @@ cd aidweather
 ```
 
 #### Windows (PowerShell)
+
 ```powershell
 git clone https://github.com/matiollipt/aidweather.git
 cd aidweather
 .\install.ps1 -Dev
 ```
-
 
 Run the test suite:
 
@@ -204,7 +204,6 @@ aidweather cache clear --yes
 
 The package exposes key modules for managing data integration. For a top-level overview, see the [\_\_init\_\_](docs/__init__.md) documentation.
 For a complete inventory of all package classes and functions, see the [API Inventory](docs/api_inventory.md).
-To understand how NASA POWER compares to alternative weather data sources (Meteostat, ERA5, etc.) and how to choose among them, see the [Data Source Comparison](docs/data_source_comparison.md).
 
 ```python
 from aidweather import (
@@ -221,11 +220,11 @@ from aidweather import (
 
 `aidweather` reads its settings from a bundled `assets/config.json`. The cache is stored in your platform's user cache directory by default:
 
-| Platform | Default cache path |
-|---|---|
-| Linux | `~/.cache/aidweather/aidweather_cache.db` |
-| macOS | `~/Library/Caches/aidweather/aidweather_cache.db` |
-| Windows | `%LOCALAPPDATA%\aidweather\Cache\aidweather_cache.db` |
+| Platform | Default cache path                                    |
+| -------- | ----------------------------------------------------- |
+| Linux    | `~/.cache/aidweather/aidweather_cache.db`             |
+| macOS    | `~/Library/Caches/aidweather/aidweather_cache.db`     |
+| Windows  | `%LOCALAPPDATA%\aidweather\Cache\aidweather_cache.db` |
 
 The cache is **shared across all your projects** — if you query the same location in two different scripts, the second call is instant.
 

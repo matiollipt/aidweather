@@ -105,9 +105,3 @@ See the [NASA POWER API documentation](https://power.larc.nasa.gov/docs/services
 | Commercial use | Allowed |
 | Attribution | Required |
 | `aidweather` software license | Apache-2.0 |
-
----
-
-## Choosing NASA POWER vs. other sources
-
-NASA POWER is not the only option for historical weather data. For a structured comparison with Meteostat and other tools — covering data origins, spatial coverage, installation, known limitations, and a decision guide — see the [Data Source Comparison](data_source_comparison.md).
