@@ -14,10 +14,23 @@ Internal representation: latitude −90 to +90 (N positive), longitude −180 to
 from __future__ import annotations
 
 import re
+import warnings
 from dataclasses import dataclass
 from typing import Any
 
-Number = int | float
+__all__ = [
+    "GeoCoordinate",
+    "normalize_coord_input",
+    "decimal_to_ddm_components",
+    "decimal_to_dms_components",
+    "parse_dd",
+    "parse_ddm",
+    "parse_dms",
+    "parse_any_coord_string",
+]
+
+# Internal numeric type alias — not part of the public API.
+_Number = int | float
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +196,14 @@ def parse_ddm(s: str, is_lat: bool) -> float:
         raise ValueError(f"Invalid DDM coordinate: {s!r}")
     deg = float(m.group("deg"))
     minutes = float(m.group("min"))
+    if m.group("hem") and deg < 0:
+        warnings.warn(
+            f"Coordinate string {s!r} has both a negative degree value and a hemisphere "
+            f"letter '{m.group('hem')}'. The negative sign is ignored; the hemisphere "
+            "letter takes precedence.",
+            UserWarning,
+            stacklevel=2,
+        )
     hem = m.group("hem") or ("N" if is_lat else "E")
     val = abs(deg) + minutes / 60.0
     return _apply_hemisphere_sign(val, hem, is_lat)
@@ -201,6 +222,14 @@ def parse_dms(s: str, is_lat: bool) -> float:
     deg = float(m.group("deg"))
     minutes = float(m.group("min"))
     seconds = float(m.group("sec"))
+    if m.group("hem") and deg < 0:
+        warnings.warn(
+            f"Coordinate string {s!r} has both a negative degree value and a hemisphere "
+            f"letter '{m.group('hem')}'. The negative sign is ignored; the hemisphere "
+            "letter takes precedence.",
+            UserWarning,
+            stacklevel=2,
+        )
     hem = m.group("hem") or ("N" if is_lat else "E")
     val = abs(deg) + minutes / 60.0 + seconds / 3600.0
     return _apply_hemisphere_sign(val, hem, is_lat)
@@ -234,7 +263,7 @@ class GeoCoordinate:
         _validate_lat_lon(self.lat, self.lon)
 
     @classmethod
-    def from_decimal(cls, lat: Number, lon: Number) -> GeoCoordinate:
+    def from_decimal(cls, lat: _Number, lon: _Number) -> GeoCoordinate:
         """Return a ``GeoCoordinate`` from decimal degree numbers."""
         return cls(lat=float(lat), lon=float(lon))
 
@@ -271,8 +300,11 @@ class GeoCoordinate:
         return self.lat, self.lon
 
     def to_dd(self) -> tuple[float, float]:
-        """Return the coordinate as a ``(latitude, longitude)`` tuple of raw decimal floats."""
-        return (self.lat, self.lon)
+        """Return the coordinate as a ``(latitude, longitude)`` tuple of floats.
+
+        Alias for :meth:`as_decimal`.
+        """
+        return self.as_decimal()
 
     def to_dd_str(
         self, lat_precision: int = 5, lon_precision: int = 5
@@ -319,7 +351,7 @@ class GeoCoordinate:
 
 
 def _looks_like_number(x: Any) -> bool:
-    """Checks if a value can be converted to a float."""
+    """Return ``True`` if *x* can be converted to a float."""
     try:
         float(x)
         return True

@@ -1,9 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
 """
 Command Line Interface for the AidWeather Power Client.
+
+Exposes the following subcommand groups via the ``app`` Typer application:
+
+- ``fetch``           — point data for a single lat/lon
+- ``fetch-multi``     — parallel point data from a CSV file
+- ``fetch-transect``  — data sampled along a geographic transect
+- ``fetch-regional``  — bounding-box data on a 0.5° grid
+- ``params``          — browse and describe NASA POWER parameters
+- ``cache``           — inspect and clear the local SQLite cache
 """
 from __future__ import annotations
 
+import contextlib
+import logging
+import os
 import sqlite3
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
@@ -19,7 +31,7 @@ from aidweather.config import cfg
 from aidweather.geo import GeoCoordinate
 
 app = typer.Typer(
-    help="CLI for fetching and analyzing agroclimatic data from NASA POWER.",
+    help="AidWeather CLI for fetching and analyzing agroclimatic data from NASA POWER.",
     no_args_is_help=True,
 )
 params_app = typer.Typer(help="Manage NASA POWER parameter catalogues.")
@@ -53,13 +65,13 @@ def _print_preview(df: pd.DataFrame, n: int = 5) -> None:
     table = Table(show_header=True, header_style="bold cyan", show_lines=False)
     for col in preview.columns:
         table.add_column(str(col), no_wrap=True)
-    for _, row in preview.iterrows():
-        table.add_row(*[str(v) for v in row])
+    for row_vals in preview.astype(str).values.tolist():
+        table.add_row(*[str(v) for v in row_vals])
     console.print(table)
 
 
 def _print_failed_points(failed: list[tuple[Any, str]], limit: int = 5) -> None:
-    """Prints the points that failed to fetch, along with their error reasons."""
+    """Print the first *limit* failed points from *failed* with their error messages."""
     console.print(f"[yellow]Warning: {len(failed)} point(s) failed to fetch:[/yellow]")
     for point, error in failed[:limit]:
         console.print(f"  [yellow]•[/yellow] {point}: {error}")
@@ -84,8 +96,25 @@ def main(
             help="Show the aidweather version and exit.",
         ),
     ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose",
+            "-v",
+            help="Enable verbose console logging.",
+        ),
+    ] = False,
 ) -> None:
     """CLI entry point."""
+    if verbose:
+        package_logger = logging.getLogger("aidweather")
+        if not any(type(h) is logging.StreamHandler for h in package_logger.handlers):
+            stream_handler = logging.StreamHandler()
+            stream_handler.setFormatter(
+                logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+            )
+            package_logger.addHandler(stream_handler)
+            package_logger.setLevel(logging.INFO)
 
 
 def _parse_date(date_str: str) -> str:
@@ -95,9 +124,16 @@ def _parse_date(date_str: str) -> str:
     except AmbiguousDateError as e:
         raise typer.BadParameter(str(e)) from e
     except Exception as e:
-        raise typer.BadParameter(
-            f"Invalid date: '{date_str}'. Expected format like YYYY-MM-DD."
-        ) from e
+        raise typer.BadParameter(f"Invalid date '{date_str}': {e}") from e
+
+
+def _validate_resolution(resolution: str) -> None:
+    """Print a styled error and exit if *resolution* is not ``'daily'`` or ``'hourly'``."""
+    if resolution not in ("daily", "hourly"):
+        console.print(
+            "[bold red]❌ Error:[/bold red] resolution must be 'daily' or 'hourly'."
+        )
+        raise typer.Exit(code=1)
 
 
 def _resolve_output_format(output: Path | None, fmt: str | None) -> str:
@@ -213,11 +249,7 @@ def fetch(  # noqa: PLR0913
     parsed_start = _parse_date(start)
     parsed_end = _parse_date(end)
 
-    if resolution not in ["daily", "hourly"]:
-        console.print(
-            "[bold red]❌ Error:[/bold red] resolution must be 'daily' or 'hourly'."
-        )
-        raise typer.Exit(code=1)
+    _validate_resolution(resolution)
 
     try:
         client = PowerClient(temporal_api=cast(Literal["daily", "hourly"], resolution))
@@ -314,11 +346,7 @@ def fetch_multi(  # noqa: PLR0913
     parsed_start = _parse_date(start)
     parsed_end = _parse_date(end)
 
-    if resolution not in ["daily", "hourly"]:
-        console.print(
-            "[bold red]❌ Error:[/bold red] resolution must be 'daily' or 'hourly'."
-        )
-        raise typer.Exit(code=1)
+    _validate_resolution(resolution)
 
     try:
         points_df = pd.read_csv(points_file)
@@ -328,14 +356,6 @@ def fetch_multi(  # noqa: PLR0913
             )
             raise typer.Exit(code=1)
 
-        points: list[dict[str, Any]] = []
-        for _, row in points_df.iterrows():
-            pt: dict[str, Any] = {"lat": float(row["lat"]), "lon": float(row["lon"])}
-            if "elevation" in points_df.columns and not pd.isna(row["elevation"]):
-                pt["elevation"] = float(row["elevation"])
-            if "name" in points_df.columns and not pd.isna(row["name"]):
-                pt["name"] = str(row["name"])
-            points.append(pt)
     except Exception as e:
         console.print(f"[bold red]❌ Error reading points file:[/bold red] {e}")
         raise typer.Exit(code=1) from e
@@ -343,7 +363,7 @@ def fetch_multi(  # noqa: PLR0913
     try:
         client = PowerClient(temporal_api=cast(Literal["daily", "hourly"], resolution))
         df, failed = client.get_multi_point_data(
-            points=points,
+            points=points_df,
             start=parsed_start,
             end=parsed_end,
             params=param_list,
@@ -457,11 +477,7 @@ def fetch_transect(  # noqa: PLR0913
     parsed_start = _parse_date(start)
     parsed_end = _parse_date(end)
 
-    if resolution not in ["daily", "hourly"]:
-        console.print(
-            "[bold red]❌ Error:[/bold red] resolution must be 'daily' or 'hourly'."
-        )
-        raise typer.Exit(code=1)
+    _validate_resolution(resolution)
 
     if num_points is None and spacing_km is None:
         console.print(
@@ -563,6 +579,7 @@ def fetch_regional(  # noqa: PLR0913
     parsed_end = _parse_date(end)
 
     try:
+        # The NASA POWER regional API only supports daily temporal resolution.
         client = PowerClient(temporal_api="daily")
         df = client.get_regional_data(
             lat_min=lat_min,
@@ -591,7 +608,10 @@ def fetch_regional(  # noqa: PLR0913
         _print_preview(df)
 
     if summarize:
-        client.summarize(df)
+        console.print(
+            "[yellow]Note:[/yellow] --summarize is not supported for regional data "
+            "(uses a multi-column structure, not a DatetimeIndex). Skipping."
+        )
 
     _save_output(df, output, fmt)
 
@@ -662,7 +682,7 @@ def cache_info():
 
     console.print(f"[bold]Cache Enabled:[/bold] {enabled}")
     console.print(f"[bold]Cache Path:[/bold] {db_path.resolve()}")
-    env_override = __import__("os").environ.get("AIDWEATHER_CACHE_DIR")
+    env_override = os.environ.get("AIDWEATHER_CACHE_DIR")
     if env_override:
         console.print("[bold]Path Source:[/bold] AIDWEATHER_CACHE_DIR env var")
     else:
@@ -682,27 +702,25 @@ def cache_info():
     console.print(f"[bold]File Size:[/bold] {size_mb:.2f} MB ({size_bytes:,} bytes)")
 
     try:
-        conn = sqlite3.connect(db_path)
-        cur = conn.cursor()
+        with contextlib.closing(sqlite3.connect(db_path)) as conn:
+            cur = conn.cursor()
 
-        cur.execute("SELECT COUNT(*) FROM cache")
-        count = cur.fetchone()[0]
-        console.print(f"[bold]Cached Entries:[/bold] {count}")
+            cur.execute("SELECT COUNT(*) FROM cache")
+            count = cur.fetchone()[0]
+            console.print(f"[bold]Cached Entries:[/bold] {count}")
 
-        if count > 0:
-            cur.execute("SELECT MIN(timestamp), MAX(timestamp) FROM cache")
-            oldest, newest = cur.fetchone()
-            console.print(f"[bold]Oldest Entry:[/bold] {oldest}")
-            console.print(f"[bold]Newest Entry:[/bold] {newest}")
+            if count > 0:
+                cur.execute("SELECT MIN(timestamp), MAX(timestamp) FROM cache")
+                oldest, newest = cur.fetchone()
+                console.print(f"[bold]Oldest Entry:[/bold] {oldest}")
+                console.print(f"[bold]Newest Entry:[/bold] {newest}")
 
-            cur.execute("SELECT SUM(LENGTH(data)) FROM cache")
-            raw_compressed = cur.fetchone()[0] or 0
-            console.print(
-                f"[bold]Compressed Data:[/bold] {raw_compressed / (1024 * 1024):.2f} MB"
-                f" (gzip, stored in BLOB)"
-            )
-
-        conn.close()
+                cur.execute("SELECT SUM(LENGTH(data)) FROM cache")
+                raw_compressed = cur.fetchone()[0] or 0
+                console.print(
+                    f"[bold]Compressed Data:[/bold] {raw_compressed / (1024 * 1024):.2f} MB"
+                    f" (gzip, stored in BLOB)"
+                )
     except sqlite3.Error as e:
         console.print(f"[bold red]Error reading cache DB:[/bold red] {e}")
 

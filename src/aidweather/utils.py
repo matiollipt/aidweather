@@ -16,10 +16,12 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+__all__ = ["ensure_date_column", "DateColumnOptions"]
 
-@dataclass
+
+@dataclass(frozen=True)
 class DateColumnOptions:
-    """Options for configuring ensure_date_column."""
+    """Options for configuring ``ensure_date_column``."""
 
     inplace: bool = False
     candidates: Iterable[str] | None = None
@@ -69,8 +71,10 @@ def _standardize_datetime_column(
     work: pd.DataFrame, name: str, strip_timezone: bool, normalize: bool
 ) -> pd.DataFrame:
     """Strip timezone info and/or normalize *name* to midnight, per the given flags."""
-    if strip_timezone:
-        work[name] = work[name].dt.tz_localize(None)
+    if strip_timezone and work[name].dt.tz is not None:
+        # tz_convert(None) strips the timezone and converts to UTC-equivalent naive
+        # timestamps.  tz_localize(None) would raise TypeError on tz-naive columns.
+        work[name] = work[name].dt.tz_convert(None)
     if normalize:
         work[name] = work[name].dt.normalize()
     return work
@@ -79,22 +83,37 @@ def _standardize_datetime_column(
 def ensure_date_column(
     df: pd.DataFrame,
     name: str = "date",
-    **kwargs,
+    *,
+    inplace: bool = False,
+    candidates: Iterable[str] | None = None,
+    index_fallback: bool = True,
+    normalize: bool = False,
+    strip_timezone: bool = True,
 ) -> pd.DataFrame:
     """Ensure *df* has a ``datetime64[ns]`` column named *name*.
 
     Searches by *name*, then any *candidates*, then falls back to a
     DatetimeIndex. Returns a copy by default; pass ``inplace=True`` to mutate.
 
+    Args:
+        df: Input DataFrame.
+        name: Target column name for the datetime column.
+        inplace: If ``True``, mutate *df* in place; otherwise return a copy.
+        candidates: Alternative column names to search if *name* is not found.
+        index_fallback: If ``True``, extract dates from a ``DatetimeIndex`` when
+            no suitable column is found.
+        normalize: If ``True``, floor all times to midnight after parsing.
+        strip_timezone: If ``True``, strip timezone info to produce tz-naive timestamps.
+
     Raises:
         ValueError: If no suitable date source is found.
     """
     opts = DateColumnOptions(
-        inplace=kwargs.get("inplace", False),
-        candidates=kwargs.get("candidates", None),
-        index_fallback=kwargs.get("index_fallback", True),
-        normalize=kwargs.get("normalize", False),
-        strip_timezone=kwargs.get("strip_timezone", True),
+        inplace=inplace,
+        candidates=candidates,
+        index_fallback=index_fallback,
+        normalize=normalize,
+        strip_timezone=strip_timezone,
     )
 
     work = df if opts.inplace else df.copy()

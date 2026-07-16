@@ -14,11 +14,14 @@ import logging
 import os
 from collections.abc import Mapping
 from importlib import resources
+from pathlib import Path
 from typing import Any
 
 from platformdirs import user_cache_dir, user_log_dir
 
-logger = logging.getLogger(__name__)
+__all__ = ["cfg", "get_config"]
+
+_logger = logging.getLogger(__name__)
 
 # Hardcoded defaults — used only if config.json is absent or unreadable
 _DEFAULT_URLS = {
@@ -33,6 +36,10 @@ _DEFAULT_URLS = {
 }
 
 
+# Sentinel used by _Config.get() to distinguish a missing key from a key whose value is None.
+_MISSING = object()
+
+
 def _load_config_dict() -> dict:
     """Load and return the bundled config.json, or an empty dict on failure."""
 
@@ -41,7 +48,9 @@ def _load_config_dict() -> dict:
         with ref.open("r", encoding="utf-8") as f:
             return dict(json.load(f))
     except (FileNotFoundError, json.JSONDecodeError, AttributeError):
-        logger.warning("Could not load internal config.json. Using defaults.")
+        # AttributeError covers Python < 3.9 where importlib.resources.files()
+        # is not available and the / operator raises instead of FileNotFoundError.
+        _logger.warning("Could not load internal config.json. Using defaults.")
         return {}
 
 
@@ -52,14 +61,21 @@ class _Config:
     """
 
     def __init__(self, data: Mapping) -> None:
-        self._data = dict(data or {})
+        # _load_config_dict always returns a dict, so no `or {}` guard is needed.
+        self._data = dict(data)
 
     def get(self, key_path: str, default: Any = None) -> Any:
-        """Return a nested value by dot-notation key path (e.g. ``"section.key"``)."""
+        """Return a nested value by dot-notation key path (e.g. ``"section.key"``).
+
+        Returns *default* when the key path is absent. Correctly distinguishes a
+        missing key from a key whose stored value is ``None`` via a private sentinel.
+        """
         value: Any = self._data
         for key in key_path.split("."):
-            value = value.get(key) if isinstance(value, dict) else None
-            if value is None:
+            if not isinstance(value, dict):
+                return default
+            value = value.get(key, _MISSING)
+            if value is _MISSING:
                 return default
         return value
 
@@ -78,21 +94,28 @@ class _Config:
         urls = self._data.get("base_urls", {})
         if temporal_api in urls and endpoint_type in urls[temporal_api]:
             return str(self.get(f"base_urls.{temporal_api}.{endpoint_type}"))
+        if temporal_api not in _DEFAULT_URLS:
+            _logger.warning(
+                "Unknown temporal_api '%s'; falling back to 'daily' URLs.", temporal_api
+            )
         temporal_defaults = _DEFAULT_URLS.get(temporal_api, _DEFAULT_URLS["daily"])
         return str(temporal_defaults.get(endpoint_type, ""))
 
     def params(self, group: str = "default") -> dict[str, str]:
         """Return a ``{code: name}`` mapping for the given parameter group."""
         params_root = self._data.get("params", {}) or {}
-        return dict(self.get(f"params.{group}", default=params_root.get("default", {})))
+        result = self.get(f"params.{group}", default=params_root.get("default", {}))
+        return dict(result) if isinstance(result, dict) else {}
 
     def param_groups(self) -> list[str]:
         """List all available parameter group names."""
-        return list(self.get("params", default={}).keys())
+        params = self.get("params", default={})
+        return list(params.keys()) if isinstance(params, dict) else []
 
     def param_descriptions(self) -> dict[str, str]:
         """Get a mapping of parameters to their full descriptions."""
-        return dict(self.get("param_descriptions", default={}))
+        result = self.get("param_descriptions", default={})
+        return dict(result) if isinstance(result, dict) else {}
 
     def cache_config(self) -> dict[str, Any]:
         """Return the effective cache configuration dict with path resolved via env, JSON, or XDG."""
@@ -104,7 +127,7 @@ class _Config:
         if env_override:
             effective_path = env_override
         elif json_path:
-            effective_path = os.path.abspath(json_path)
+            effective_path = str(Path(json_path).resolve())
         else:
             effective_path = xdg_default
 
@@ -112,17 +135,20 @@ class _Config:
             "enabled": True,
             "path": effective_path,
         }
-        json_overrides = {
-            k: v for k, v in (self.get("cache_config") or {}).items() if k != "path"
-        }
+        json_section = self.get("cache_config")
+        if not isinstance(json_section, dict):
+            json_section = {}
+        json_overrides = {k: v for k, v in json_section.items() if k != "path"}
         return {**defaults, **json_overrides}
 
     def logging_config(self) -> dict[str, Any]:
         """Return the log configuration dict with filename resolved to an absolute path."""
         raw_config = self.get("logging_config", default={})
+        if not isinstance(raw_config, dict):
+            raw_config = {}
         filename = raw_config.get("filename", "aidweather.log")
 
-        if os.path.isabs(filename):
+        if Path(filename).is_absolute():
             resolved_path = filename
         else:
             env_override = os.environ.get("AIDWEATHER_LOG_DIR")
@@ -131,11 +157,11 @@ class _Config:
             if env_override:
                 log_dir = env_override
             elif json_path:
-                log_dir = os.path.abspath(json_path)
+                log_dir = str(Path(json_path).resolve())
             else:
                 log_dir = user_log_dir("aidweather", appauthor=False)
 
-            resolved_path = os.path.join(log_dir, filename)
+            resolved_path = str(Path(log_dir) / filename)
 
         defaults: dict[str, Any] = {
             "enabled": False,
@@ -149,7 +175,8 @@ class _Config:
 
     def api_limits(self) -> dict[str, Any]:
         """Return the API limits configuration dict."""
-        return dict(self.get("api_limits", default={}))
+        result = self.get("api_limits", default={})
+        return dict(result) if isinstance(result, dict) else {}
 
 
 # --- Singleton ---
@@ -161,5 +188,10 @@ cfg = _Config(_config_data)
 
 
 def get_config() -> _Config:
-    """Return the singleton ``_Config`` instance."""
+    """Return the singleton ``_Config`` instance.
+
+    This is a stable public alias for the ``cfg`` module-level singleton,
+    provided for dependency-injection and testing scenarios where callers
+    prefer a function call over importing a module-level name directly.
+    """
     return cfg

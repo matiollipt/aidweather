@@ -339,5 +339,5 @@ def test_regional_request_failure_logging(mock_session):
             if "Regional API request failed for payload" in call[0][0]:
                 failed_log_found = True
                 # Payload should be serialized as JSON/compact string representation
-                assert '"parameters": "T2M"' in call[0][0] or "'parameters': 'T2M'" in call[0][0]
+                assert '"parameters": "T2M"' in call[0][1] or "'parameters': 'T2M'" in call[0][1]
         assert failed_log_found, "Could not find payload representation log message"

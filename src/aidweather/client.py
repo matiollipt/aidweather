@@ -15,7 +15,6 @@ import gzip
 import hashlib
 import json
 import logging
-import os
 import re
 import sqlite3
 import threading
@@ -24,6 +23,7 @@ import warnings
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
@@ -39,6 +39,8 @@ from urllib3.util.retry import Retry
 from aidweather import __version__
 from aidweather.config import cfg
 from aidweather.geo import GeoCoordinate
+
+__all__ = ["PowerClient"]
 
 
 class RateLimiter:
@@ -122,6 +124,10 @@ _AMBIGUOUS_SLASH_DATE_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{2,4}$")
 
 class AmbiguousDateError(ValueError):
     """Raised when a date string's day/month order cannot be determined."""
+
+
+class APIRequestError(OSError):
+    """Raised when a NASA POWER API request fails after all retries are exhausted."""
 
 
 def parse_date_strict(date_value: Any) -> pd.Timestamp:
@@ -216,6 +222,11 @@ def _convert_df_to_cacheable_json(
     df_copy = df.copy()
     date_format = "%Y%m%d%H" if temporal_api == "hourly" else "%Y%m%d"
     df_copy.index = df_copy.index.strftime(date_format)
+    # NASA POWER uses -999 as its fill value. We replicate that sentinel here so
+    # the cache stores data in the same format as the raw API response.
+    # NOTE: any genuine measurement of exactly -999 will be treated as missing on
+    # read-back (_response_to_dataframe); this is an accepted trade-off for safe
+    # data analysis.
     df_copy = df_copy.fillna(-999)
     param_dict = df_copy.to_dict(orient="dict")
     return {"properties": {"parameter": param_dict}}
@@ -231,12 +242,23 @@ def _fetch_and_parse(
     try:
         resp = session.get(url, params=payload)
 
+        if resp.status_code in (400, 422):
+            try:
+                err_data = resp.json()
+                if isinstance(err_data, dict) and "messages" in err_data:
+                    err_msg = "; ".join(err_data["messages"])
+                    raise APIRequestError(
+                        f"NASA POWER API Error ({resp.status_code}): {err_msg}"
+                    )
+            except (ValueError, TypeError, json.JSONDecodeError):
+                pass
+
         resp.raise_for_status()
         byte_count = len(resp.content)
         data = _parse_json_response(resp)
 
         if "error" in data:
-            logger.error(f"API Error for payload {payload}: {data.get('error')}")
+            logger.error("API Error for payload %s: %s", payload, data.get("error"))
             return pd.DataFrame(), 0
 
         return _response_to_dataframe(data, temporal_api), byte_count
@@ -245,8 +267,8 @@ def _fetch_and_parse(
         resp_obj = getattr(e, "response", None)
         if resp_obj is not None and getattr(resp_obj, "status_code", None) == 429:
             logger.error("Rate limit exceeded (HTTP 429). Please slow down requests.")
-        logger.error(f"API request failed for payload {payload}: {e}")
-        raise OSError(f"API request failed: {e}") from e
+        logger.error("API request failed for payload %s: %s", payload, e)
+        raise APIRequestError(f"API request failed: {e}") from e
 
 
 def _merge_and_deduplicate(
@@ -311,20 +333,28 @@ def _response_to_dataframe(
     elif len(sample_key) == 8:
         date_format = "%Y%m%d"
     else:
-        logger.warning(
-            "Unrecognised date key '%s'. Attempting mixed format.", sample_key
+        # "mixed" would be the only remaining option, but it requires pandas ≥ 2.0.
+        # Raise explicitly with a clear diagnostic instead of letting pd.to_datetime
+        # fail silently and return an empty DataFrame with no explanation.
+        raise ValueError(
+            f"Unrecognised date key format '{sample_key}': expected 8-char daily "
+            "(YYYYMMDD) or 10-char hourly (YYYYMMDDHH). "
+            "Note: the 'mixed' fallback requires pandas \u2265 2.0."
         )
-        date_format = "mixed"
 
     try:
         df["date"] = pd.to_datetime(df.index, format=date_format)
-    except Exception:
+    except (ValueError, TypeError) as exc:
         logger.error(
-            "Failed to parse date index with format '%s'. Returning empty.", date_format
+            "Failed to parse date index with format '%s': %s. Returning empty.",
+            date_format,
+            exc,
         )
         return pd.DataFrame()
 
     df = df.reset_index(drop=True).set_index("date")
+    # Replace NASA POWER's -999 fill value with pd.NA for safe downstream analysis.
+    # See also: _convert_df_to_cacheable_json where NaN→-999 round-trip is applied.
     df = df.replace(-999, pd.NA)
 
     for col in df.columns:
@@ -366,6 +396,8 @@ def _regional_response_to_dataframe(data: dict[str, Any]) -> pd.DataFrame:
 
         for date_str, param_values in date_map.items():
             record: dict[str, Any] = {
+                # Regional endpoint only supports daily resolution; hourly regional
+                # is not available via the NASA POWER API (hardcoded daily format).
                 "date": pd.to_datetime(date_str, format="%Y%m%d"),
                 "lat": lat,
                 "lon": lon,
@@ -445,8 +477,6 @@ class RegionalRequest(PowerQuery):
 
 # --- Main Client Class ---
 
-__all__ = ["PowerClient"]
-
 
 class PowerClient:
     """NASA POWER API client with SQLite caching, retry logic, and rate limiting.
@@ -456,18 +486,6 @@ class PowerClient:
         session: The session object used for making HTTP requests.
         db_conn: The connection to the SQLite cache database, if caching is enabled.
     """
-    temporal_api: Literal["daily", "hourly"]
-    base_url: str
-    regional_base_url: str
-    params_desc: dict[str, str]
-    session: requests.Session
-    db_conn: sqlite3.Connection | None
-    db_lock: threading.Lock
-    cache_cfg: dict[str, Any]
-    api_limits: dict[str, Any]
-    max_workers_limit: int
-    rate_limiter: RateLimiter
-    _metrics: dict[str, Any]
 
     def __init__(
         self,
@@ -525,11 +543,10 @@ class PowerClient:
         """
         db_path = ""
         try:
-            cache_dir = str(self.cache_cfg.get("path", "."))
-            if not os.path.exists(cache_dir):
-                os.makedirs(cache_dir, exist_ok=True)
+            cache_dir = Path(self.cache_cfg.get("path", "."))
+            cache_dir.mkdir(parents=True, exist_ok=True)
 
-            db_path = os.path.join(cache_dir, "aidweather_cache.db")
+            db_path = str(cache_dir / "aidweather_cache.db")
             # Set a timeout to prevent errors with concurrent writes
             self.db_conn = sqlite3.connect(db_path, timeout=10, check_same_thread=False)
 
@@ -544,7 +561,7 @@ class PowerClient:
                 """
                 )
         except sqlite3.Error as e:
-            logger.error(f"Failed to initialize cache database at {db_path}: {e}")
+            logger.error("Failed to initialize cache database at %s: %s", db_path, e)
             self.db_conn = None
 
     def _validate_inputs(
@@ -583,7 +600,9 @@ class PowerClient:
                     )
                     row = cur.fetchone()
             except sqlite3.Error as e:
-                logger.warning(f"Failed to read from cache database for key {key}: {e}")
+                logger.warning(
+                    "Failed to read from cache database for key %s: %s", key, e
+                )
                 return None
 
         if row:
@@ -599,7 +618,7 @@ class PowerClient:
                 return cached_df
             except (json.JSONDecodeError, gzip.BadGzipFile) as e:
                 logger.warning(
-                    f"Could not decode or decompress cache data for key {key}: {e}"
+                    "Could not decode or decompress cache data for key %s: %s", key, e
                 )
 
         return None
@@ -621,7 +640,7 @@ class PowerClient:
                         (key, timestamp, compressed_data),
                     )
             except (sqlite3.Error, TypeError) as e:
-                logger.warning(f"Could not write to cache for key {key}: {e}")
+                logger.warning("Could not write to cache for key %s: %s", key, e)
 
     def _format_date(self, date_str: Any) -> str:
         """Format *date_str* into the ``YYYYMMDD`` string required by the API."""
@@ -749,14 +768,13 @@ class PowerClient:
 
         total_bytes = 0
         start_time = time.perf_counter()
-        logger.info(f"Fetching {len(ranges)} missing date range(s).")
+        logger.info("Fetching %d missing date range(s).", len(ranges))
 
         for start, end in ranges:
             payload = base_payload.copy()
             payload["start"] = self._format_date(start)
             payload["end"] = self._format_date(end)
-            if hasattr(self, "rate_limiter") and self.rate_limiter:
-                self.rate_limiter.acquire()
+            self.rate_limiter.acquire()
             df, b = _fetch_and_parse(self.session, url, payload, self.temporal_api)
             self._metrics["api_calls"] += 1
             if not df.empty:
@@ -777,13 +795,12 @@ class PowerClient:
 
         if not use_cache:
             start_time = time.perf_counter()
-            if hasattr(self, "rate_limiter") and self.rate_limiter:
-                self.rate_limiter.acquire()
+            self.rate_limiter.acquire()
             df, b = _fetch_and_parse(
                 self.session, fetch_url, base_payload, self.temporal_api
             )
             self._metrics["api_calls"] += 1
-            self._metrics["total_downloaded_bytes"] = b
+            self._metrics["total_downloaded_bytes"] += b
             self._metrics["fetch_duration"] = time.perf_counter() - start_time
             return df
 
@@ -807,7 +824,7 @@ class PowerClient:
         )
 
         if not ranges_to_fetch and cached_df is not None:
-            logger.info(f"Retrieved full date range from cache for key {cache_key}.")
+            logger.info("Retrieved full date range from cache for key %s.", cache_key)
             self._metrics["cache_hits"] += 1
             return _filter_df_by_date(cached_df, req_start, req_end)
 
@@ -818,9 +835,12 @@ class PowerClient:
             )
         except OSError as e:
             fetch_failed = True
+            # Do not swallow client-side validation or range errors (HTTP 400, 422)
+            if "Error (400)" in str(e) or "Error (422)" in str(e) or "400 Client Error" in str(e) or "422 Client Error" in str(e):
+                raise
             if cached_df is not None:
                 logger.warning(
-                    f"API request failed: {e}. Serving stale data from cache."
+                    "API request failed: %s. Serving stale data from cache.", e
                 )
                 return _filter_df_by_date(cached_df, req_start, req_end)
             else:
@@ -830,7 +850,7 @@ class PowerClient:
         combined_df = _merge_and_deduplicate(all_dfs)
 
         if not fetch_failed and not combined_df.empty:
-            logger.info(f"Updating cache for key {cache_key} with merged data.")
+            logger.info("Updating cache for key %s with merged data.", cache_key)
             cacheable_json = _convert_df_to_cacheable_json(
                 combined_df, self.temporal_api
             )
@@ -842,6 +862,7 @@ class PowerClient:
                 start=req_start,
                 end=req_end,
                 freq="D" if self.temporal_api == "daily" else "h",
+                name="date",
             )
             params = base_payload.get("parameters", "").split(",")
             # Create a DataFrame with the correct index and columns, filled with NaNs
@@ -908,6 +929,7 @@ class PowerClient:
                 start=req_start,
                 end=req_end,
                 freq="D" if self.temporal_api == "daily" else "h",
+                name="date",
             )
             return pd.DataFrame(np.nan, index=date_range, columns=params)
 
@@ -924,24 +946,13 @@ class PowerClient:
     def _parse_points_input(
         points: list | pd.DataFrame,
     ) -> list[dict]:
-        """Normalises the `points` argument into a list of dicts with at
-        least 'lat' and 'lon' keys."""
+        """Normalise the ``points`` argument into a list of dicts with at
+        least ``'lat'`` and ``'lon'`` keys."""
         if not isinstance(points, pd.DataFrame):
             return list(points)  # type: ignore[arg-type]
-
-        parsed: list[dict] = []
-        for _, row in points.iterrows():
-            pt: dict = {"lat": float(row["lat"]), "lon": float(row["lon"])}
-            for col, key in [
-                ("elevation", "elevation"),
-                ("name", "name"),
-                ("wind_elevation", "wind_elevation"),
-                ("wind_surface", "wind_surface"),
-            ]:
-                if col in points.columns and not pd.isna(row[col]):
-                    pt[key] = float(row[col]) if col != "name" else str(row[col])
-            parsed.append(pt)
-        return parsed
+        # to_dict avoids iterrows() dtype coercion on mixed-type DataFrames
+        # (e.g. float lat/lon + string name + float elevation).
+        return points.to_dict(orient="records")
 
     def _submit_point_futures(
         self,
@@ -1010,7 +1021,7 @@ class PowerClient:
                 df = df.set_index("date")
                 all_results.append(df)
             except Exception as e:
-                logger.warning(f"Failed to fetch data for point {point}: {e}")
+                logger.warning("Failed to fetch data for point %s: %s", point, e)
                 failed_points.append((point, str(e)))
 
         return all_results, failed_points
@@ -1061,7 +1072,7 @@ class PowerClient:
 
         if failed_points:
             logger.warning(
-                f"{len(failed_points)}/{len(parsed_points)} points failed to fetch."
+                "%d/%d points failed to fetch.", len(failed_points), len(parsed_points)
             )
 
         if not all_results:
@@ -1164,11 +1175,20 @@ class PowerClient:
         self._metrics["total_requests"] += 1
         start_time = time.perf_counter()
 
-        if hasattr(self, "rate_limiter") and self.rate_limiter:
-            self.rate_limiter.acquire()
+        self.rate_limiter.acquire()
 
         try:
             resp = self.session.get(self.regional_base_url, params=payload)
+            if resp.status_code in (400, 422):
+                try:
+                    err_data = resp.json()
+                    if isinstance(err_data, dict) and "messages" in err_data:
+                        err_msg = "; ".join(err_data["messages"])
+                        raise APIRequestError(
+                            f"NASA POWER API Error ({resp.status_code}): {err_msg}"
+                        )
+                except (ValueError, TypeError, json.JSONDecodeError):
+                    pass
             resp.raise_for_status()
             byte_count = len(resp.content)
             data = _parse_json_response(resp)
@@ -1179,9 +1199,11 @@ class PowerClient:
                     "Rate limit exceeded (HTTP 429). Please slow down requests or use an API key."
                 )
             logger.error(
-                f"Regional API request failed for payload {_safe_payload_repr(payload)}: {e}"
+                "Regional API request failed for payload %s: %s",
+                _safe_payload_repr(payload),
+                e,
             )
-            raise OSError(f"Regional API request failed: {e}") from e
+            raise APIRequestError(f"Regional API request failed: {e}") from e
 
         self._metrics["api_calls"] += 1
         self._metrics["total_downloaded_bytes"] += byte_count
@@ -1189,7 +1211,9 @@ class PowerClient:
 
         if "error" in data:
             logger.error(
-                f"Regional API Error for payload {_safe_payload_repr(payload)}: {data.get('error')}"
+                "Regional API Error for payload %s: %s",
+                _safe_payload_repr(payload),
+                data.get("error"),
             )
             return pd.DataFrame()
 
@@ -1214,6 +1238,13 @@ class PowerClient:
                 is requested.
         """
         if request is not None:
+            warnings.warn(
+                "Both positional coordinate arguments and 'request' were supplied. "
+                "The 'request' object takes precedence; all positional arguments "
+                "(lat_min, lat_max, lon_min, lon_max, start, end, params) are ignored.",
+                UserWarning,
+                stacklevel=2,
+            )
             lat_min = request.lat_min
             lat_max = request.lat_max
             lon_min = request.lon_min
@@ -1430,6 +1461,7 @@ class PowerClient:
         return f"<PowerClient(api='{self.temporal_api}', url='{self.base_url}')>"
 
     def __del__(self) -> None:
-        """Close the SQLite cache connection."""
-        if self.db_conn:
-            self.db_conn.close()
+        """Close the SQLite cache connection on garbage collection."""
+        conn = getattr(self, "db_conn", None)
+        if conn is not None:
+            conn.close()
