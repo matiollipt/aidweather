@@ -117,6 +117,26 @@ class _Config:
         result = self.get("param_descriptions", default={})
         return dict(result) if isinstance(result, dict) else {}
 
+    def param_metadata(self, code: str | None = None) -> dict[str, Any]:
+        """Get structured parameter metadata dictionary for *code* or all parameters if ``None``."""
+        all_meta = self.get("param_metadata", default={})
+        if not isinstance(all_meta, dict):
+            all_meta = {}
+        if code is not None:
+            return dict(all_meta.get(code, {}))
+        return dict(all_meta)
+
+    def get_native_grid(self, code: str) -> tuple[float, float]:
+        """Return (latitude_degrees, longitude_degrees) native grid resolution for parameter *code*.
+
+        Falls back to default MERRA-2 grid (0.5°, 0.625°) if *code* is not registered or missing grid details.
+        """
+        meta = self.param_metadata(code)
+        grid = meta.get("native_grid", {}) if isinstance(meta, dict) else {}
+        lat_deg = grid.get("latitude_degrees", 0.5)
+        lon_deg = grid.get("longitude_degrees", 0.625)
+        return float(lat_deg), float(lon_deg)
+
     def cache_config(self) -> dict[str, Any]:
         """Return the effective cache configuration dict with path resolved via env, JSON, or XDG."""
         xdg_default = user_cache_dir("aidweather", appauthor=False)

@@ -341,3 +341,61 @@ def test_regional_request_failure_logging(mock_session):
                 # Payload should be serialized as JSON/compact string representation
                 assert '"parameters": "T2M"' in call[0][1] or "'parameters': 'T2M'" in call[0][1]
         assert failed_log_found, "Could not find payload representation log message"
+
+
+def test_spatial_provenance_attrs(mock_session):
+    """Verify returned DataFrames contain parameter metadata and spatial provenance in df.attrs."""
+    mock_session.get(
+        "https://power.larc.nasa.gov/api/temporal/daily/point",
+        json=SAMPLE_POINT_RESPONSE,
+    )
+    client = PowerClient()
+    client.cache_cfg["enabled"] = False
+
+    df = client.get_point_data_from_coordinate(
+        coord=GeoCoordinate(lat=10.0, lon=20.0),
+        start="2023-01-01",
+        end="2023-01-02",
+        params=["T2M", "ALLSKY_SFC_SW_DWN"],
+    )
+
+    assert "spatial_provenance" in df.attrs
+    prov = df.attrs["spatial_provenance"]
+    assert prov["requested_params"] == ["T2M", "ALLSKY_SFC_SW_DWN"]
+    assert "T2M" in prov["parameters_metadata"]
+    assert "ALLSKY_SFC_SW_DWN" in prov["parameters_metadata"]
+
+
+def test_parameter_specific_transect_clamping():
+    """Verify sub-grid transect clamping uses requested parameter native grid resolution."""
+    coord_a = GeoCoordinate.from_decimal(0.0, 0.0)
+    coord_b = GeoCoordinate.from_decimal(0.8, 0.0)  # ~88.8 km distance
+
+    # For MERRA-2 (0.5° lat step ~55.55 km): max points over 88.8 km is 88.8/55.55 + 1 = 2 points
+    res_merra = PowerClient._resolve_transect_num_points(
+        start_coord=coord_a,
+        end_coord=coord_b,
+        num_points=10,
+        spacing_km=None,
+        params=["T2M"],
+    )
+    assert res_merra == 2
+
+    # For CERES solar radiation (1.0° lat step ~111.1 km): max points over 88.8 km is 2 (endpoints clamped)
+    res_solar = PowerClient._resolve_transect_num_points(
+        start_coord=coord_a,
+        end_coord=coord_b,
+        num_points=10,
+        spacing_km=None,
+        params=["ALLSKY_SFC_SW_DWN"],
+    )
+    assert res_solar == 2
+
+
+def test_cache_key_versioning():
+    """Verify cache keys contain version prefix v1_."""
+    from aidweather.client import _make_cache_key
+    payload = {"parameters": "T2M", "latitude": 10.0, "longitude": 20.0}
+    key = _make_cache_key(payload, temporal_api="daily")
+    assert key.startswith("v1_")
+

@@ -7,7 +7,7 @@ Exposes the following subcommand groups via the ``app`` Typer application:
 - ``fetch``           — point data for a single lat/lon
 - ``fetch-multi``     — parallel point data from a CSV file
 - ``fetch-transect``  — data sampled along a geographic transect
-- ``fetch-regional``  — bounding-box data on a 0.5° grid
+- ``fetch-regional``  — bounding-box data via regional endpoint
 - ``params``          — browse and describe NASA POWER parameters
 - ``cache``           — inspect and clear the local SQLite cache
 """
@@ -438,7 +438,7 @@ def fetch_transect(  # noqa: PLR0913
             help=(
                 "Approximate spacing between sample points in km. "
                 "Used to derive num-points when --num-points is omitted. "
-                "Minimum effective spacing is ~55 km (NASA POWER 0.5° grid)."
+                "Minimum effective spacing is governed by parameter native grid resolution."
             ),
         ),
     ] = None,
@@ -470,8 +470,8 @@ def fetch_transect(  # noqa: PLR0913
 
     Points are sampled evenly along the straight-line path from the start to
     the end coordinate. Provide either --num-points or --spacing-km to control
-    sampling density. The minimum effective spacing is ~55 km (NASA POWER
-    native 0.5° grid resolution); finer requests are clamped automatically.
+    sampling density. Minimum effective spacing is derived from the requested
+    parameter native spatial resolution; finer requests are clamped automatically.
     """
     param_list = [p.strip() for p in params.split(",") if p.strip()]
     parsed_start = _parse_date(start)
@@ -568,10 +568,10 @@ def fetch_regional(  # noqa: PLR0913
         bool, typer.Option("--summarize", help="Print summary panel.")
     ] = False,
 ):
-    """Fetch weather data for a regional bounding box (0.5° grid).
+    """Fetch weather data for a regional bounding box.
 
-    The NASA POWER regional API returns data on a 0.5° × 0.5° grid within
-    the specified bounding box. The box must not exceed 4.5° on either axis,
+    The NASA POWER regional API returns bounding-box data for the requested grid
+    within the specified boundaries. The box must not exceed 4.5° on either axis,
     and only one parameter can be requested per call.
     """
     param_list = [p.strip() for p in params.split(",") if p.strip()]

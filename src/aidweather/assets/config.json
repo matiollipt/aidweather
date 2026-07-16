@@ -53,6 +53,173 @@
         "WD10M": "Average Wind Direction at 10 m (degrees): Modeled daily average direction from which the wind is blowing. Data is obtained from the NASA MERRA-2 model (1981-Present). Primarily used for modeling the drift/dispersion of airborne inputs (pesticides, herbicides, spores) and for local climate pattern analysis (e.g., windbreak planning).",
         "PS": "Surface Pressure (kPa): The atmospheric pressure at the earth's surface, adjusted for local elevation. Data is obtained from the NASA MERRA-2 model (1981-Present). PS is a necessary input for the Penman-Monteith Evapotranspiration equation to accurately account for air density, making it fundamental for precise water management."
     },
+    "param_metadata": {
+        "T2M": {
+            "short_name": "Temperature at 2 Meters",
+            "description": "Average Air Temperature at 2 m",
+            "units": {"daily": "°C", "hourly": "°C"},
+            "source_family": "MERRA-2/GEOS-IT",
+            "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
+            "availability": {"daily_start": "1981-01-01", "hourly_start": "2001-01-01"},
+            "time_standards": ["LST", "UTC"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / GMAO MERRA-2"
+        },
+        "T2M_MAX": {
+            "short_name": "Maximum Temperature at 2 Meters",
+            "description": "Maximum Air Temperature at 2 m",
+            "units": {"daily": "°C", "hourly": "°C"},
+            "source_family": "MERRA-2/GEOS-IT",
+            "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
+            "availability": {"daily_start": "1981-01-01", "hourly_start": "2001-01-01"},
+            "time_standards": ["LST", "UTC"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / GMAO MERRA-2"
+        },
+        "T2M_MIN": {
+            "short_name": "Minimum Temperature at 2 Meters",
+            "description": "Minimum Air Temperature at 2 m",
+            "units": {"daily": "°C", "hourly": "°C"},
+            "source_family": "MERRA-2/GEOS-IT",
+            "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
+            "availability": {"daily_start": "1981-01-01", "hourly_start": "2001-01-01"},
+            "time_standards": ["LST", "UTC"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / GMAO MERRA-2"
+        },
+        "T2M_RANGE": {
+            "short_name": "Temperature Range at 2 Meters",
+            "description": "Diurnal Temperature Range at 2 m",
+            "units": {"daily": "°C", "hourly": "°C"},
+            "source_family": "MERRA-2/GEOS-IT",
+            "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
+            "availability": {"daily_start": "1981-01-01", "hourly_start": "2001-01-01"},
+            "time_standards": ["LST", "UTC"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / GMAO MERRA-2"
+        },
+        "T2MWET": {
+            "short_name": "Wet Bulb Temperature at 2 Meters",
+            "description": "Wet Bulb Temperature at 2 m",
+            "units": {"daily": "°C", "hourly": "°C"},
+            "source_family": "MERRA-2/GEOS-IT",
+            "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
+            "availability": {"daily_start": "1981-01-01", "hourly_start": "2001-01-01"},
+            "time_standards": ["LST", "UTC"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / GMAO MERRA-2"
+        },
+        "T2MDEW": {
+            "short_name": "Dew Point Temperature at 2 Meters",
+            "description": "Dew Point Temperature at 2 m",
+            "units": {"daily": "°C", "hourly": "°C"},
+            "source_family": "MERRA-2/GEOS-IT",
+            "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
+            "availability": {"daily_start": "1981-01-01", "hourly_start": "2001-01-01"},
+            "time_standards": ["LST", "UTC"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / GMAO MERRA-2"
+        },
+        "TS": {
+            "short_name": "Surface Skin Temperature",
+            "description": "Surface Skin Temperature",
+            "units": {"daily": "°C", "hourly": "°C"},
+            "source_family": "MERRA-2/GEOS-IT",
+            "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
+            "availability": {"daily_start": "1981-01-01", "hourly_start": "2001-01-01"},
+            "time_standards": ["LST", "UTC"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / GMAO MERRA-2"
+        },
+        "RH2M": {
+            "short_name": "Relative Humidity at 2 Meters",
+            "description": "Relative Humidity at 2 m",
+            "units": {"daily": "%", "hourly": "%"},
+            "source_family": "MERRA-2/GEOS-IT",
+            "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
+            "availability": {"daily_start": "1981-01-01", "hourly_start": "2001-01-01"},
+            "time_standards": ["LST", "UTC"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / GMAO MERRA-2"
+        },
+        "PRECTOTCORR": {
+            "short_name": "Corrected Total Precipitation",
+            "description": "Corrected Total Precipitation (liquid + ice)",
+            "units": {"daily": "mm/day", "hourly": "mm/hr"},
+            "source_family": "MERRA-2/GEOS-IT",
+            "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
+            "availability": {"daily_start": "1981-01-01", "hourly_start": "2001-01-01"},
+            "time_standards": ["LST", "UTC"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / GMAO MERRA-2"
+        },
+        "ALLSKY_SFC_SW_DWN": {
+            "short_name": "All Sky Surface Shortwave Downward Irradiance",
+            "description": "All Sky Surface Shortwave Downward Radiation",
+            "units": {"daily": "kWh/m²/day", "hourly": "W/m²"},
+            "source_family": "CERES SYN1deg / FLASHFlux / SRB",
+            "native_grid": {"latitude_degrees": 1.0, "longitude_degrees": 1.0},
+            "availability": {"daily_start": "1984-01-01", "hourly_start": "2001-01-01"},
+            "time_standards": ["LST", "UTC"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / LaRC CERES"
+        },
+        "ALLSKY_SFC_PAR_TOT": {
+            "short_name": "All Sky Surface PAR Total",
+            "description": "All Sky Photosynthetically Active Radiation",
+            "units": {"daily": "MJ/m²/day", "hourly": "W/m²"},
+            "source_family": "CERES SYN1deg / FLASHFlux / SRB",
+            "native_grid": {"latitude_degrees": 1.0, "longitude_degrees": 1.0},
+            "availability": {"daily_start": "1984-01-01", "hourly_start": "2001-01-01"},
+            "time_standards": ["LST", "UTC"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / LaRC CERES"
+        },
+        "WS10M": {
+            "short_name": "Wind Speed at 10 Meters",
+            "description": "Average Wind Speed at 10 m",
+            "units": {"daily": "m/s", "hourly": "m/s"},
+            "source_family": "MERRA-2/GEOS-IT",
+            "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
+            "availability": {"daily_start": "1981-01-01", "hourly_start": "2001-01-01"},
+            "time_standards": ["LST", "UTC"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / GMAO MERRA-2"
+        },
+        "WS10M_MAX": {
+            "short_name": "Maximum Wind Speed at 10 Meters",
+            "description": "Maximum Wind Speed at 10 m",
+            "units": {"daily": "m/s", "hourly": "m/s"},
+            "source_family": "MERRA-2/GEOS-IT",
+            "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
+            "availability": {"daily_start": "1981-01-01", "hourly_start": "2001-01-01"},
+            "time_standards": ["LST", "UTC"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / GMAO MERRA-2"
+        },
+        "WD10M": {
+            "short_name": "Wind Direction at 10 Meters",
+            "description": "Average Wind Direction at 10 m",
+            "units": {"daily": "degrees", "hourly": "degrees"},
+            "source_family": "MERRA-2/GEOS-IT",
+            "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
+            "availability": {"daily_start": "1981-01-01", "hourly_start": "2001-01-01"},
+            "time_standards": ["LST", "UTC"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / GMAO MERRA-2"
+        },
+        "PS": {
+            "short_name": "Surface Pressure",
+            "description": "Surface Pressure",
+            "units": {"daily": "kPa", "hourly": "kPa"},
+            "source_family": "MERRA-2/GEOS-IT",
+            "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
+            "availability": {"daily_start": "1981-01-01", "hourly_start": "2001-01-01"},
+            "time_standards": ["LST", "UTC"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / GMAO MERRA-2"
+        }
+    },
     "api_limits": {
         "max_parameters_per_point_request": 20,
         "max_parameters_per_regional_request": 1,

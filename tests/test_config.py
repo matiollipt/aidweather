@@ -180,3 +180,19 @@ def test_singleton_cfg_is_loaded():
     assert cfg.get("base_urls.daily.point") is not None
     assert "power.larc.nasa.gov" in cfg.get_url("daily")
     assert isinstance(cfg.param_groups(), list)
+
+
+def test_param_metadata_and_grid_resolution():
+    """
+    Test retrieval of parameter metadata and native grid resolutions.
+    """
+    meta_t2m = cfg.param_metadata("T2M")
+    assert meta_t2m.get("source_family") == "MERRA-2/GEOS-IT"
+    assert cfg.get_native_grid("T2M") == (0.5, 0.625)
+
+    meta_solar = cfg.param_metadata("ALLSKY_SFC_SW_DWN")
+    assert "CERES" in meta_solar.get("source_family", "")
+    assert cfg.get_native_grid("ALLSKY_SFC_SW_DWN") == (1.0, 1.0)
+
+    # Unknown parameter fallback
+    assert cfg.get_native_grid("UNKNOWN_PARAM") == (0.5, 0.625)

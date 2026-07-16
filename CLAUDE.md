@@ -90,7 +90,7 @@ paths (indexed vs. reset_index'd, single-point vs. multi-point) produce dates in
 
 ## NASA POWER API guardrails
 
-Documented in `docs/aidweather_nasa_power_usage.md` — respect these when writing code that calls
+Documented in `docs/parameter_provenance.md` and `docs/spatial_interpretation.md` — respect these when writing code that calls
 the API directly rather than through `PowerClient`:
 
 - Max 20 params per daily point request, 15 for hourly, 1 for regional.
@@ -159,5 +159,4 @@ complete, check whether the touched function/branch has corresponding coverage i
 add tests for meaningfully new behavior or previously-untested error paths you touched. If you
 notice a gap you're not fixing, say so (one line, with why) rather than leaving it silent.
 
-Known gaps as of 2026-07-10 are tracked in `docs/test_coverage_gaps.md` — a snapshot, not a live
-audit; the standing rule above is what should keep new gaps from accumulating.
+Technical debt and release limits are tracked in `docs/technical_debt.md`.

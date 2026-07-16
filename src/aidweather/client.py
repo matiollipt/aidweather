@@ -146,13 +146,13 @@ def parse_date_strict(date_value: Any) -> pd.Timestamp:
 
 
 def _make_cache_key(payload: dict[str, Any], temporal_api: str = "daily") -> str:
-    """Return a deterministic SHA-256 hex digest for *payload*, excluding date keys."""
+    """Return a deterministic SHA-256 hex digest for *payload* with schema versioning prefix, excluding date keys."""
     key_payload = payload.copy()
     key_payload.pop("start", None)
     key_payload.pop("end", None)
     key_payload["_temporal_api"] = temporal_api
     encoded = json.dumps(key_payload, sort_keys=True).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    return "v1_" + hashlib.sha256(encoded).hexdigest()
 
 
 def _format_bytes(size: float) -> str:
@@ -221,7 +221,7 @@ def _convert_df_to_cacheable_json(
     """Convert a DataFrame back into the JSON dict format used for cache storage."""
     df_copy = df.copy()
     date_format = "%Y%m%d%H" if temporal_api == "hourly" else "%Y%m%d"
-    df_copy.index = df_copy.index.strftime(date_format)
+    df_copy.index = pd.DatetimeIndex(df_copy.index).strftime(date_format)
     # NASA POWER uses -999 as its fill value. We replicate that sentinel here so
     # the cache stores data in the same format as the raw API response.
     # NOTE: any genuine measurement of exactly -999 will be treated as missing on
@@ -298,7 +298,9 @@ def _filter_df_by_date(
     """Return *df* filtered to the inclusive date range [*start*, *end*]."""
     if df.empty:
         return df
-    return df.loc[start:end]
+    res = df.loc[start:end]
+    res.attrs = df.attrs.copy()
+    return res
 
 
 # --- Parsing Helpers ---
@@ -368,7 +370,9 @@ def _ensure_all_params_in_df(df: pd.DataFrame, params: list[str]) -> pd.DataFram
     for param in params:
         if param not in df.columns:
             df[param] = pd.NA
-    return df[params]
+    res = df[params]
+    res.attrs = df.attrs.copy()
+    return res
 
 
 def _regional_response_to_dataframe(data: dict[str, Any]) -> pd.DataFrame:
@@ -802,6 +806,12 @@ class PowerClient:
             self._metrics["api_calls"] += 1
             self._metrics["total_downloaded_bytes"] += b
             self._metrics["fetch_duration"] = time.perf_counter() - start_time
+            req_params = base_payload.get("parameters", "").split(",")
+            df.attrs["spatial_provenance"] = {
+                "temporal_api": self.temporal_api,
+                "requested_params": [p for p in req_params if p],
+                "parameters_metadata": {p: cfg.param_metadata(p) for p in req_params if p},
+            }
             return df
 
         cache_key = _make_cache_key(base_payload, self.temporal_api)
@@ -867,10 +877,24 @@ class PowerClient:
             params = base_payload.get("parameters", "").split(",")
             # Create a DataFrame with the correct index and columns, filled with NaNs
             if not params or not params[0]:
-                return pd.DataFrame(index=date_range)
-            return pd.DataFrame(np.nan, index=date_range, columns=params)
+                empty_res = pd.DataFrame(index=date_range)
+            else:
+                empty_res = pd.DataFrame(np.nan, index=date_range, columns=params)
+            empty_res.attrs["spatial_provenance"] = {
+                "temporal_api": self.temporal_api,
+                "requested_params": [p for p in params if p],
+                "parameters_metadata": {p: cfg.param_metadata(p) for p in params if p},
+            }
+            return empty_res
 
-        return _filter_df_by_date(combined_df, req_start, req_end)
+        res_df = _filter_df_by_date(combined_df, req_start, req_end)
+        req_params = base_payload.get("parameters", "").split(",")
+        res_df.attrs["spatial_provenance"] = {
+            "temporal_api": self.temporal_api,
+            "requested_params": [p for p in req_params if p],
+            "parameters_metadata": {p: cfg.param_metadata(p) for p in req_params if p},
+        }
+        return res_df
 
     def get_point_data(
         self,
@@ -891,6 +915,10 @@ class PowerClient:
             request.wind_elevation,
             request.wind_surface,
         )
+
+    def get_parameter_metadata(self, code: str | None = None) -> dict[str, Any]:
+        """Return verified scientific metadata dictionary for *code* or all parameters if ``None``."""
+        return cfg.param_metadata(code)
 
     def get_point_data_from_coordinate(  # noqa: PLR0913
         self,
@@ -944,7 +972,7 @@ class PowerClient:
 
     @staticmethod
     def _parse_points_input(
-        points: list | pd.DataFrame,
+        points: Sequence | pd.DataFrame,
     ) -> list[dict]:
         """Normalise the ``points`` argument into a list of dicts with at
         least ``'lat'`` and ``'lon'`` keys."""
@@ -1029,7 +1057,7 @@ class PowerClient:
     def get_multi_point_data(
         self,
         points: (
-            list[dict[str, Any] | tuple[float, float] | tuple[float, float, float]]
+            Sequence[dict[str, Any] | tuple[float, float] | tuple[float, float, float]]
             | pd.DataFrame
         ),
         start: datetime | str | timedelta | pd.Timestamp,
@@ -1298,8 +1326,9 @@ class PowerClient:
         end_coord: GeoCoordinate,
         num_points: int | None,
         spacing_km: float | None,
+        params: list[str] | None = None,
     ) -> int:
-        """Resolve the number of transect sample points from *num_points* or *spacing_km*.
+        """Resolve the number of transect sample points based on parameter native spatial resolution.
 
         Raises:
             ValueError: If neither *num_points* nor *spacing_km* is provided.
@@ -1312,8 +1341,14 @@ class PowerClient:
         dlon_km = (lon2 - lon1) * 111.32 * np.cos(mid_lat_rad)
         total_km = float(np.hypot(dlat_km, dlon_km))
 
-        # Minimum spacing the API can meaningfully resolve
-        min_spacing_km = 0.5 * 111.1  # ~55.55 km per 0.5°
+        # Minimum spacing derived from requested parameter native grid (latitude step)
+        min_lat_deg = 0.5
+        if params:
+            grid_res_list = [cfg.get_native_grid(p)[0] for p in params]
+            if grid_res_list:
+                min_lat_deg = min(grid_res_list)
+
+        min_spacing_km = min_lat_deg * 111.1
 
         if num_points is not None and spacing_km is not None:
             effective_spacing = total_km / max(num_points - 1, 1)
@@ -1347,11 +1382,13 @@ class PowerClient:
             if effective_spacing < min_spacing_km:
                 max_allowed = max(2, int(total_km / min_spacing_km) + 1)
                 logger.info(
-                    "Requested num_points=%d would give %.1f km spacing, "
-                    "below the NASA POWER 0.5° grid resolution (~55 km). "
+                    "Requested num_points=%d gives %.1f km spacing, below the "
+                    "parameter native spatial resolution (%.2f° lat, ~%.1f km). "
                     "Clamping to %d points.",
                     num_points,
                     effective_spacing,
+                    min_lat_deg,
+                    min_spacing_km,
                     max_allowed,
                 )
                 num_points = max_allowed
@@ -1381,6 +1418,7 @@ class PowerClient:
             request.end_coord,
             request.num_points,
             request.spacing_km,
+            params=request.params,
         )
 
         lat1, lon1 = request.start_coord.as_decimal()

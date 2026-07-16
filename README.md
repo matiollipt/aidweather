@@ -1,257 +1,153 @@
 # aidweather
 
-**Weather data retrieval and validation from NASA POWER API**
+**Agroclimatic & Solar Data Integration from NASA POWER**
 
-`aidweather` is a Python library for fetching, caching, and validating daily and hourly meteorological data from [NASA's POWER API](https://power.larc.nasa.gov/). The main user interfaces are a simple Python API, a CLI (see below), and utilities for geospatial coordinate operations.
+`aidweather` is a Python package for fetching, caching, and analyzing meteorological and solar radiation data from [NASA's POWER API](https://power.larc.nasa.gov/). It provides structured parameter metadata, parameter-aware spatial sampling along 1D transects, bounding-box queries, SQLite request caching, and geospatial coordinate parsing.
 
 > [!WARNING]
-> **Beta:** Public API and CLI output may change before 1.0. Please [report issues](https://github.com/matiollipt/aidweather/issues) — feedback is welcome.
+> **Beta Status:** `aidweather` is in active beta. Public API methods and CLI options are stable, but additions may occur prior to 1.0. Feedback and [issue reports](https://github.com/matiollipt/aidweather/issues) are welcome.
 
 > [!IMPORTANT]
-> **NASA POWER Compliance:** Review the [License, Usage & API Guardrails](docs/aidweather_nasa_power_usage.md) guide.
+> **Data Provenance & Spatial Support:** A coordinate submitted to NASA POWER resolves to a source product grid cell; it does not produce a point measurement at the precise coordinate. Different parameters originate from different source products (e.g. MERRA-2 at 0.5° × 0.625°, CERES solar radiation at 1.0° × 1.0°). Nearby coordinates mapping to the same source cell will return identical series.
+
+---
+
+## Supported NASA POWER Parameters
+
+`aidweather` provides built-in metadata, unit validation, and spatial grid specifications for 15 core parameters across meteorological and radiative families:
+
+| Code | Parameter Name | Source Product | Native Grid (Lat × Lon) | Daily Unit | Hourly Unit |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `T2M` | Temperature at 2 m | MERRA-2 / GEOS-IT | 0.50° × 0.625° | °C | °C |
+| `T2M_MAX` | Maximum Temperature at 2 m | MERRA-2 / GEOS-IT | 0.50° × 0.625° | °C | °C |
+| `T2M_MIN` | Minimum Temperature at 2 m | MERRA-2 / GEOS-IT | 0.50° × 0.625° | °C | °C |
+| `T2M_RANGE` | Diurnal Temperature Range at 2 m | MERRA-2 / GEOS-IT | 0.50° × 0.625° | °C | °C |
+| `T2MWET` | Wet Bulb Temperature at 2 m | MERRA-2 / GEOS-IT | 0.50° × 0.625° | °C | °C |
+| `T2MDEW` | Dew Point Temperature at 2 m | MERRA-2 / GEOS-IT | 0.50° × 0.625° | °C | °C |
+| `TS` | Surface Skin Temperature | MERRA-2 / GEOS-IT | 0.50° × 0.625° | °C | °C |
+| `RH2M` | Relative Humidity at 2 m | MERRA-2 / GEOS-IT | 0.50° × 0.625° | % | % |
+| `PRECTOTCORR` | Corrected Total Precipitation | MERRA-2 / GEOS-IT | 0.50° × 0.625° | mm/day | mm/hr |
+| `ALLSKY_SFC_SW_DWN` | Surface Shortwave Downward Irradiance | CERES SYN1deg / SRB | 1.00° × 1.00° | kWh/m²/day | W/m² |
+| `ALLSKY_SFC_PAR_TOT` | Surface PAR Total | CERES SYN1deg / SRB | 1.00° × 1.00° | MJ/m²/day | W/m² |
+| `WS10M` | Wind Speed at 10 m | MERRA-2 / GEOS-IT | 0.50° × 0.625° | m/s | m/s |
+| `WS10M_MAX` | Maximum Wind Speed at 10 m | MERRA-2 / GEOS-IT | 0.50° × 0.625° | m/s | m/s |
+| `WD10M` | Wind Direction at 10 m | MERRA-2 / GEOS-IT | 0.50° × 0.625° | degrees | degrees |
+| `PS` | Surface Pressure | MERRA-2 / GEOS-IT | 0.50° × 0.625° | kPa | kPa |
 
 ---
 
 ## Installation
 
-### Quick Install (Linux / macOS)
+### Unix / macOS
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash
 ```
 
-Optional flags passed via `-s --`:
-
-| Flag        | Description                                             |
-| ----------- | ------------------------------------------------------- |
-| `--dev`     | Also install developer tools                            |
-| `--dev -y`  | Developer tools, skip prompts                           |
-| `--uv-tool` | Install globally in an isolated environment via uv tool |
-
-Example:
+Or install via `uv tool`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash -s -- --dev -y
-```
-
-#### Install system-wide via `uv tool`
-
-To install system-wide in an isolated environment using `uv tool`:
-
-```bash
-# Via curl installation script:
-curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash -s -- --uv-tool -y
-
-# Or directly using uv:
 uv tool install git+https://github.com/matiollipt/aidweather.git
 ```
 
-### Quick Install (Windows PowerShell)
+### Windows (PowerShell)
 
 ```powershell
-# Default install in .venv:
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/matiollipt/aidweather/main/install.ps1))) -Yes
-
-# Install with developer tools:
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/matiollipt/aidweather/main/install.ps1))) -Dev -Yes
-
-# Install system-wide as a uv tool:
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/matiollipt/aidweather/main/install.ps1))) -UvTool -Yes
 ```
 
-Optional parameters:
+---
 
-| Parameter       | Description                                             |
-| --------------- | ------------------------------------------------------- |
-| `-Dev`          | Also install developer tools                            |
-| `-UvTool`       | Install globally in an isolated environment via uv tool |
-| `-NoVenv`       | Skip venv creation (use active/global Python)           |
-| `-VenvPath DIR` | Custom venv path (default: `.venv`)                     |
-| `-Clean`        | Wipe and recreate venv before installing                |
-| `-Yes`          | Skip confirmation prompts                               |
+## Documentation Guides
 
-### Local Development
+The documentation is organized into dedicated scientific and developer reference guides:
 
-#### Unix/macOS
+- [User Guide](docs/user_guide.md) — Comprehensive guide for scientific users and data analysts.
+- [Spatial Interpretation Guide](docs/spatial_interpretation.md) — Native resolution grids, transects, regional boxes, and station comparisons.
+- [Parameter & Provenance Guide](docs/parameter_provenance.md) — Complete catalogue, source product lineage, temporal ranges, and time standards.
+- [API Reference](docs/api_reference.md) — Complete python reference for `PowerClient`, `GeoCoordinate`, and query functions.
+- [Configuration Reference](docs/config_reference.md) — Environment variables, JSON assets, and SQLite cache layout.
+- [Developer Guide](docs/developer_guide.md) — Cache key versioning, request lifecycles, and architecture notes.
+- [Contributing & Testing](docs/contributing.md) — Quality standards, `pytest` invocation, and mypy typing.
 
-```bash
-git clone https://github.com/matiollipt/aidweather.git
-cd aidweather
-./install.sh --dev
-```
+---
 
-#### Windows (PowerShell)
-
-```powershell
-git clone https://github.com/matiollipt/aidweather.git
-cd aidweather
-.\install.ps1 -Dev
-```
-
-Run the test suite:
-
-```bash
-uv run --with-editable . --extra test pytest -q
-```
-
-By default, the test suite skips live API calls to prevent service spam. To run the live integration tests against the actual NASA POWER endpoints, set the `AIDWEATHER_RUN_LIVE_TESTS` environment variable to `1`:
-
-```bash
-AIDWEATHER_RUN_LIVE_TESTS=1 uv run --with-editable . --extra test pytest
-```
-
-Before publishing, follow the [Release Checklist](docs/release_checklist.md).
-
-## Quick Start
-
-See the [Client Documentation](docs/client.md) for full details on the `PowerClient`.
+## Quick Start (Python)
 
 ```python
-from aidweather import PowerClient
+from aidweather import PowerClient, GeoCoordinate
 
+# Initialize client for daily temporal resolution
 client = PowerClient(temporal_api="daily")
+
+# 1. Fetch single-point meteorological and solar data
 df = client.get_point_data(
     lat=-23.55,
     lon=-46.63,
     start="2023-01-01",
-    end="2023-12-31",
-    params=["T2M", "PRECTOTCORR", "RH2M"],
+    end="2023-01-31",
+    params=["T2M", "ALLSKY_SFC_SW_DWN", "PRECTOTCORR"],
 )
 print(df.head())
-```
+# Access attached parameter metadata & provenance
+print(df.attrs["spatial_provenance"])
 
-### 1D transect
-
-Fetch data along a straight-line path between two endpoints. Sampling is controlled
-by `num_points` or `spacing_km`; the 0.5° NASA POWER grid resolution (~55 km) is
-enforced as a minimum spacing:
-
-```python
-from aidweather import GeoCoordinate
-
+# 2. Sample 1D spatial transect (clamping respects native parameter grid spacing)
 coord_a = GeoCoordinate.from_decimal(-25.0, -48.0)
-coord_b = GeoCoordinate.from_decimal(-20.0, -48.0)  # ~555 km north
+coord_b = GeoCoordinate.from_decimal(-20.0, -48.0)
 
-df = client.get_transect_data(
+df_transect = client.get_transect_data(
     start_coord=coord_a,
     end_coord=coord_b,
-    start="2023-01-01", end="2023-01-31",
-    params=["T2M", "PRECTOTCORR"],
-    num_points=5,
-)
-print(df.head())  # DataFrame with lat, lon columns + parameters
-```
-
-### Regional grid data
-
-Fetch data on a 0.5° × 0.5° grid within a bounding box (max 4.5° × 4.5°, one parameter per request):
-
-```python
-df = client.get_regional_data(
-    lat_min=-23.5, lat_max=-20.0,
-    lon_min=-47.0, lon_max=-44.0,
-    start="2023-01-01", end="2023-01-31",
+    start="2023-01-01",
+    end="2023-01-07",
     params=["T2M"],
+    spacing_km=100.0,
 )
-print(df.head())  # DataFrame with lat, lon, elevation, and T2M columns
+print(df_transect.head())
 ```
 
-## CLI
+---
+
+## Command Line Interface (CLI)
 
 ```bash
-# Fetch weather data for a single point
+# Fetch single point data to CSV
 aidweather fetch --lat -23.55 --lon -46.63 \
-    --start 2023-01-01 --end 2023-12-31 \
-    --params T2M,PRECTOTCORR --output data.csv
+    --start 2023-01-01 --end 2023-01-31 \
+    --params T2M,PRECTOTCORR --output point_data.csv
 
-# Create a small CSV file sites.csv with 3 points in São Paulo
-cat << 'EOF' > sites.csv
-lat,lon,name
--23.55,-46.63,Sao Paulo Center
--23.56,-46.64,Sao Paulo South
--23.54,-46.62,Sao Paulo North
-EOF
-
-# Fetch for multiple points from a CSV file
-aidweather fetch-multi --points-file sites.csv \
-    --start 2023-01-01 --end 2023-12-31 --output multi.parquet --format parquet
-
-# Fetch along a spatial transect (start and end coordinates)
+# Sample along a spatial transect
 aidweather fetch-transect \
     --lat-start -25.0 --lon-start -48.0 \
     --lat-end   -20.0 --lon-end   -48.0 \
     --start 2023-01-01 --end 2023-01-31 \
-    --num-points 5
+    --spacing-km 100.0
 
-# Fetch regional grid data for a bounding box
+# Fetch regional bounding box data (max 4.5° x 4.5°, 1 parameter per request)
 aidweather fetch-regional --lat-min -23.5 --lat-max -20.0 \
     --lon-min -47.0 --lon-max -44.0 \
     --start 2023-01-01 --end 2023-01-31 \
     --params T2M --output regional.csv
 
-# List available NASA POWER parameters
+# Inspect parameter metadata & local cache
 aidweather params list --group all
-
-# Describe a specific parameter
 aidweather params describe T2M
-
-# Cache management-
-aidweather cache info
-aidweather cache clear --yes
-```
-
-## Public API
-
-The package exposes key modules for managing data integration. For a top-level overview, see the [\_\_init\_\_](docs/__init__.md) documentation.
-For a complete inventory of all package classes and functions, see the [API Inventory](docs/api_inventory.md).
-
-```python
-from aidweather import (
-    PowerClient,            # NASA POWER API client with SQLite cache. Read more: docs/client.md
-    GeoCoordinate,          # Type-safe lat/lon value object. Read more: docs/geo.md
-    normalize_coord_input,  # Parse DMS / DDM / DD coordinate strings. Read more: docs/geo.md
-    cfg,                    # Singleton config (used by downstream packages). Read more: docs/config.md
-    get_config,             # Convenience accessor for cfg. Read more: docs/config.md
-    ensure_date_column,     # Robust DataFrame date column normalization. Read more: docs/utils.md
-)
-```
-
-## Configuration & Assets
-
-`aidweather` reads its settings from a bundled `assets/config.json`. The cache is stored in your platform's user cache directory by default:
-
-| Platform | Default cache path                                    |
-| -------- | ----------------------------------------------------- |
-| Linux    | `~/.cache/aidweather/aidweather_cache.db`             |
-| macOS    | `~/Library/Caches/aidweather/aidweather_cache.db`     |
-| Windows  | `%LOCALAPPDATA%\aidweather\Cache\aidweather_cache.db` |
-
-The cache is **shared across all your projects** — if you query the same location in two different scripts, the second call is instant.
-
-To use a custom location, set an environment variable:
-
-```bash
-export AIDWEATHER_CACHE_DIR=/your/shared/cache
-```
-
-Check your current cache state:
-
-```bash
 aidweather cache info
 ```
 
-For a full breakdown of the configuration files, see [Assets](docs/ASSETS.md) and [Config](docs/config.md).
+---
 
-## Citation & Attribution
+## Data Licensing & Official NASA Attribution
 
-When publishing analyses based on data retrieved with `aidweather`, cite NASA POWER as the data provider and mention the package version used in your workflow.
+NASA POWER data are open access and free of charge. In accordance with [NASA Earthdata Data Use and Attribution Policy](https://www.earthdata.nasa.gov/learn/use-nasa-data), scientific publications, reports, and applications utilizing `aidweather` must properly cite the NASA POWER Project and acknowledge the primary satellite/reanalysis source products.
 
-Suggested acknowledgement:
+**Suggested Acknowledgment Text:**
+> *"Meteorological and solar energy parameters were retrieved from the NASA Prediction Of Worldwide Energy Resources (POWER) project using aidweather v0.1.3. NASA POWER meteorological products originate from the GMAO MERRA-2 / GEOS-IT assimilation models, and solar radiation products originate from NASA LaRC CERES / FLASHFlux / SRB satellite observations."*
 
-```text
-Weather and solar data were obtained from the NASA POWER Project using aidweather v0.1.3.
-```
+---
 
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
+

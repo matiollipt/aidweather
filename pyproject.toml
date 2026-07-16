@@ -43,6 +43,9 @@ test = [
     "requests-mock>=1.11.0",
     "types-requests>=2.31.0",
     "pytest-cov>=4.0.0",
+    "mypy>=1.8.0",
+    "ruff>=0.2.0",
+    "pandas-stubs",
 ]
 
 [project.scripts]
