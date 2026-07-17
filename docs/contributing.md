@@ -1,4 +1,8 @@
-    # Contributing & Testing Guide — `aidweather`
+<p align="center">
+  <img src="img/aidweather-logo-transparent.png" alt="aidweather logo" width="220">
+</p>
+
+# Contributing & Testing Guide — `aidweather`
 
 Thank you for contributing to `aidweather`. Please follow these setup and testing guidelines to maintain code quality and reproducibility.
 

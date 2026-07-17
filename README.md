@@ -1,7 +1,12 @@
-# aidweather
-![aidweather](https://raw.githubusercontent.com/matiollipt/aidweather/main/docs/img/aidweather-logo-transparent.png)
+<p align="center">
+  <img src="docs/img/aidweather-logo-transparent.png" alt="aidweather logo" width="380">
+</p>
 
-**Agroclimatic & Solar Data Integration from NASA POWER**
+<h1 align="center">aidweather</h1>
+
+<p align="center">
+  <strong>Agroclimatic & Solar Data Integration from NASA POWER</strong>
+</p>
 
 `aidweather` bridges your project with reliable weather and solar radiation data from [NASA's POWER API](https://power.larc.nasa.gov/). Key features include:
 

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="img/aidweather-logo-transparent.png" alt="aidweather logo" width="220">
+</p>
+
 # API Reference — `aidweather`
 
 This document details the public Python API surface of `aidweather`.

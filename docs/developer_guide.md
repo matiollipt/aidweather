@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="img/aidweather-logo-transparent.png" alt="aidweather logo" width="220">
+</p>
+
 # Developer & Architecture Guide — `aidweather`
 
 This document details internal design patterns, request lifecycles, and cache key generation mechanisms for `aidweather` developers and contributors.

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="img/aidweather-logo-transparent.png" alt="aidweather logo" width="220">
+</p>
+
 # User Guide — `aidweather`
 
 This guide provides a practical walkthrough for retrieving, cleaning, and analyzing NASA POWER agroclimatic data using `aidweather`.
