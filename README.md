@@ -65,6 +65,8 @@ The documentation is organized into dedicated scientific and developer reference
 - [User Guide](docs/user_guide.md) — Comprehensive guide for scientific users and data analysts.
 - [Spatial Interpretation Guide](docs/spatial_interpretation.md) — Native resolution grids, transects, regional boxes, and station comparisons.
 - [Parameter & Provenance Guide](docs/parameter_provenance.md) — Complete catalogue, source product lineage, temporal ranges, and time standards.
+- [Geospatial Coordinate Reference](docs/geo_reference.md) — DD, DDM, and DMS notation systems, `GeoCoordinate` construction, string parsing, Unicode handling, and ambiguity policies.
+- [DataFrame Date Utilities Reference](docs/utils_reference.md) — `ensure_date_column`, candidate matching, DatetimeIndex fallback, timezone handling, and `DateColumnOptions`.
 - [API Reference](docs/api_reference.md) — Complete python reference for `PowerClient`, `GeoCoordinate`, and query functions.
 - [Configuration Reference](docs/config_reference.md) — Environment variables, JSON assets, and SQLite cache layout.
 - [Developer Guide](docs/developer_guide.md) — Cache key versioning, request lifecycles, and architecture notes.

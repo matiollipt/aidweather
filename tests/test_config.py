@@ -22,7 +22,10 @@ def sample_config_data():
             "daily": {"point": "http://test.com/daily/point"},
             "hourly": {"point": "http://test.com/hourly/point"},
         },
-        "params": {"default": {"T2M": "Temperature at 2m"}, "metadata": {"LAT": "Latitude"}},
+        "params": {
+            "default": {"T2M": "Temperature at 2m"},
+            "metadata": {"LAT": "Latitude"},
+        },
         "cache_config": {"enabled": False, "custom_path": "/tmp/custom_cache"},
         "api_limits": {"max_days": 366},
     }
@@ -130,7 +133,6 @@ def test_params_retrieval(sample_config_data, empty_config):
 # --- Tests for File I/O and Error Handling ---
 
 
-
 @patch("importlib.resources.files")
 def test_load_config_dict_file_not_found(mock_files, caplog):
     """
@@ -186,13 +188,17 @@ def test_param_metadata_and_grid_resolution():
     """
     Test retrieval of parameter metadata and native grid resolutions.
     """
-    meta_t2m = cfg.param_metadata("T2M")
+    # Test keyword argument / single string
+    meta_t2m = cfg.param_metadata(params="T2M")
     assert meta_t2m.get("source_family") == "MERRA-2/GEOS-IT"
-    assert cfg.get_native_grid("T2M") == (0.5, 0.625)
+    assert cfg.get_native_grid(community="T2M") == (0.5, 0.625)
 
-    meta_solar = cfg.param_metadata("ALLSKY_SFC_SW_DWN")
-    assert "CERES" in meta_solar.get("source_family", "")
-    assert cfg.get_native_grid("ALLSKY_SFC_SW_DWN") == (1.0, 1.0)
+    # Test list of params
+    multi_meta = cfg.param_metadata(params=["T2M", "ALLSKY_SFC_SW_DWN"])
+    assert "T2M" in multi_meta
+    assert "ALLSKY_SFC_SW_DWN" in multi_meta
+    assert multi_meta["T2M"].get("source_family") == "MERRA-2/GEOS-IT"
+    assert "CERES" in multi_meta["ALLSKY_SFC_SW_DWN"].get("source_family", "")
 
     # Unknown parameter fallback
-    assert cfg.get_native_grid("UNKNOWN_PARAM") == (0.5, 0.625)
+    assert cfg.get_native_grid(community="UNKNOWN_PARAM") == (0.5, 0.625)

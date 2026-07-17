@@ -128,3 +128,11 @@ class GeoCoordinate:
 - `cfg.param_metadata(code=None) -> dict[str, Any]`
 - `cfg.get_native_grid(code: str) -> tuple[float, float]`
 - `cfg.cache_config() -> dict[str, Any]`
+
+---
+
+## `aidweather.utils`
+
+- `ensure_date_column(df, name="date", *, inplace=False, candidates=None, index_fallback=True, normalize=False, strip_timezone=True) -> pd.DataFrame`
+- `DateColumnOptions(inplace=False, candidates=None, index_fallback=True, normalize=False, strip_timezone=True)`
+

@@ -21,7 +21,20 @@ __all__ = ["ensure_date_column", "DateColumnOptions"]
 
 @dataclass(frozen=True)
 class DateColumnOptions:
-    """Options for configuring ``ensure_date_column``."""
+    """Configuration bag for :func:`ensure_date_column`.
+
+    Attributes:
+        inplace: If ``True``, mutate the input DataFrame in place rather than
+            working on a copy. Defaults to ``False``.
+        candidates: Ordered list of alternative column names to search when the
+            primary *name* is not found. The first match wins.
+        index_fallback: If ``True``, extract dates from a ``DatetimeIndex``
+            when neither *name* nor any *candidate* column is present.
+        normalize: If ``True``, floor all parsed timestamps to midnight
+            (``00:00:00``) after parsing.
+        strip_timezone: If ``True``, strip timezone info from timezone-aware
+            timestamps, converting them to tz-naive UTC-equivalent values.
+    """
 
     inplace: bool = False
     candidates: Iterable[str] | None = None
@@ -92,21 +105,30 @@ def ensure_date_column(
 ) -> pd.DataFrame:
     """Ensure *df* has a ``datetime64[ns]`` column named *name*.
 
-    Searches by *name*, then any *candidates*, then falls back to a
-    DatetimeIndex. Returns a copy by default; pass ``inplace=True`` to mutate.
+    Searches for the target column by *name* first, then any *candidates*,
+    then falls back to the DataFrame's ``DatetimeIndex``. Returns a copy by
+    default; pass ``inplace=True`` to mutate *df* directly.
 
     Args:
-        df: Input DataFrame.
-        name: Target column name for the datetime column.
+        df: Input DataFrame to process.
+        name: Target column name for the resulting datetime column. Defaults
+            to ``"date"``.
         inplace: If ``True``, mutate *df* in place; otherwise return a copy.
-        candidates: Alternative column names to search if *name* is not found.
-        index_fallback: If ``True``, extract dates from a ``DatetimeIndex`` when
-            no suitable column is found.
-        normalize: If ``True``, floor all times to midnight after parsing.
-        strip_timezone: If ``True``, strip timezone info to produce tz-naive timestamps.
+        candidates: Ordered list of alternative column names to search when
+            *name* is absent. The first match is used.
+        index_fallback: If ``True``, extract dates from a ``DatetimeIndex``
+            when neither *name* nor any *candidate* column is found.
+        normalize: If ``True``, floor all timestamps to midnight after parsing.
+        strip_timezone: If ``True``, strip timezone info from tz-aware
+            timestamps to produce tz-naive UTC-equivalent values.
+
+    Returns:
+        The DataFrame (mutated in place if *inplace* is ``True``, otherwise a
+        new copy) with a ``datetime64[ns]`` column named *name*.
 
     Raises:
-        ValueError: If no suitable date source is found.
+        ValueError: If no suitable date source is found (column not present,
+            no matching candidate, and index is not a ``DatetimeIndex``).
     """
     opts = DateColumnOptions(
         inplace=inplace,

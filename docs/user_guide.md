@@ -113,3 +113,19 @@ df_regional = client.get_regional_data(
 > Regional API Constraints:
 > - Maximum bounding box size: 4.5° × 4.5°.
 > - Exactly 1 parameter can be requested per regional API call.
+
+---
+
+## 7. Working with Output DataFrames & Date Utilities
+
+Point queries in `PowerClient` return DataFrames with a `DatetimeIndex` named `"date"`. To convert the index to an explicit `datetime64[ns]` column (e.g. for joins or CSV exports) or standardise heterogeneous date columns across input files, use `ensure_date_column`:
+
+```python
+from aidweather.utils import ensure_date_column
+
+# Convert DatetimeIndex or alternative column ('timestamp', 'dt') into a 'date' column
+df_flat = ensure_date_column(df, name="date", candidates=["timestamp", "time"])
+```
+
+See the [DataFrame Date Utilities Reference](utils_reference.md) for full details on candidate searching, timezone stripping, and `DateColumnOptions`.
+

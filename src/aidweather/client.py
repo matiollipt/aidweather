@@ -5,9 +5,22 @@ aidweather.client
 
 NASA POWER API client with SQLite caching and retry logic.
 
-Exposes ``PowerClient`` for fetching daily and hourly meteorological data from
-the POWER point and regional endpoints. Caches responses locally by request
-hash to avoid redundant network calls.
+Exposes :class:`PowerClient` for fetching daily and hourly meteorological data
+from the NASA POWER point and regional endpoints. The client:
+
+- Validates and normalises geographic coordinates via :mod:`aidweather.geo`.
+- Builds request payloads conforming to the NASA POWER query schema.
+- Maintains a local gzip-compressed SQLite cache keyed by a SHA-256 digest
+  of the request payload (excluding date range), enabling gap-aware partial
+  fetching — only missing date segments are fetched from the network.
+- Enforces a sliding-window rate limiter and a thread-pool size ceiling to
+  comply with NASA POWER API guidelines.
+- Returns :class:`pandas.DataFrame` objects with a :class:`~pandas.DatetimeIndex`
+  named ``"date"`` and one column per requested parameter.
+
+Missing values (NASA POWER fill code ``-999``) are replaced with
+:data:`pandas.NA` on read. Data invariants (no silent imputation, preserved
+units, coordinate precision) are documented in ``docs/developer_guide.md``.
 """
 from __future__ import annotations
 
@@ -44,7 +57,18 @@ __all__ = ["PowerClient"]
 
 
 class RateLimiter:
-    """Thread-safe sliding-window rate limiter."""
+    """Thread-safe sliding-window rate limiter.
+
+    Enforces a maximum number of calls within a rolling time window. Designed
+    for use with the NASA POWER API, which recommends no more than 30 requests
+    per 60-second window per client.
+
+    Attributes:
+        max_calls: Maximum number of calls allowed within *period* seconds.
+        period: Length of the sliding window in seconds.
+        lock: Threading lock protecting the call-history list.
+        calls: Timestamps (``time.time()``) of recent calls within the window.
+    """
 
     def __init__(self, max_calls: int, period: float) -> None:
         self.max_calls = max_calls
@@ -53,7 +77,13 @@ class RateLimiter:
         self.calls: list[float] = []
 
     def acquire(self) -> None:
-        """Blocks until a call is allowed under the rate limit."""
+        """Block the calling thread until a call slot is available.
+
+        If ``max_calls <= 0`` or ``period <= 0``, the limiter is effectively
+        disabled and this method returns immediately. Otherwise it spins in a
+        lock-protected loop, sleeping until the oldest call in the sliding
+        window has aged out and a new slot becomes available.
+        """
 
         # If no rate limiting is configured, no limiting is applied.
         if self.max_calls <= 0 or self.period <= 0:
@@ -94,7 +124,24 @@ def _session_with_retries(
     backoff_factor: float = 0.5,
     status_forcelist: Sequence[int] = (429, 500, 502, 503, 504),
 ) -> requests.Session:
-    """Return a ``requests.Session`` with a ``Retry`` adapter mounted on both http and https."""
+    """Build a ``requests.Session`` with automatic retry and connection pooling.
+
+    Mounts a :class:`~requests.adapters.HTTPAdapter` with
+    :class:`~urllib3.util.retry.Retry` on both ``http://`` and ``https://``
+    prefixes. The ``User-Agent`` header is set to :data:`USER_AGENT`.
+
+    Args:
+        total: Total number of retries (also applied to read, connect, and
+            status sub-limits). Defaults to ``5``.
+        backoff_factor: Sleep multiplier between retries
+            (``sleep = backoff_factor * 2 ** (attempt - 1)``). Defaults to
+            ``0.5``.
+        status_forcelist: HTTP status codes that trigger a retry. Defaults to
+            ``(429, 500, 502, 503, 504)``.
+
+    Returns:
+        A configured :class:`requests.Session` ready for use.
+    """
     # Added read, connect, status retries to total retries
     retry = Retry(
         total=total,
@@ -131,9 +178,25 @@ class APIRequestError(OSError):
 
 
 def parse_date_strict(date_value: Any) -> pd.Timestamp:
-    """Parses a date, rejecting slash-separated strings (e.g. "05/03/2023")
-    since NASA POWER's day-first users and pandas' month-first default would
-    silently disagree on which is the day and which is the month.
+    """Parse a date value into a :class:`pandas.Timestamp`, rejecting ambiguous slash formats.
+
+    Slash-separated date strings (e.g. ``"05/03/2023"``) are explicitly
+    rejected because NASA POWER's day-first convention and pandas' default
+    month-first parsing would silently disagree on the day/month order.
+
+    Args:
+        date_value: A date-like value — ISO string (``"2023-01-15"``),
+            ``YYYYMMDD`` string, :class:`datetime.datetime`,
+            :class:`datetime.timedelta`, or any value accepted by
+            :func:`pandas.to_datetime`.
+
+    Returns:
+        A tz-naive :class:`pandas.Timestamp`.
+
+    Raises:
+        AmbiguousDateError: If *date_value* is a slash-separated string whose
+            day/month order is ambiguous.
+        ValueError: If *date_value* cannot be parsed as a date.
     """
     if isinstance(date_value, str) and _AMBIGUOUS_SLASH_DATE_RE.match(
         date_value.strip()
@@ -146,7 +209,23 @@ def parse_date_strict(date_value: Any) -> pd.Timestamp:
 
 
 def _make_cache_key(payload: dict[str, Any], temporal_api: str = "daily") -> str:
-    """Return a deterministic SHA-256 hex digest for *payload* with schema versioning prefix, excluding date keys."""
+    """Return a versioned SHA-256 cache key for *payload*.
+
+    The ``"start"`` and ``"end"`` date keys are excluded from the digest so
+    that the same spatial request with different date ranges maps to the same
+    cache key, allowing the cache layer to store the full fetched history
+    under one key and fetch only missing date segments.
+
+    The returned string is prefixed with ``"v1_"`` for schema versioning.
+
+    Args:
+        payload: The NASA POWER query parameter dict.
+        temporal_api: Temporal resolution string appended to the payload
+            before hashing. Defaults to ``"daily"``.
+
+    Returns:
+        A ``"v1_<sha256hex>"`` string uniquely identifying the spatial request.
+    """
     key_payload = payload.copy()
     key_payload.pop("start", None)
     key_payload.pop("end", None)
@@ -194,7 +273,25 @@ def _get_date_ranges_to_fetch(
     cached_df: pd.DataFrame | None,
     temporal_api: str,
 ) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
-    """Return the date ranges missing from *cached_df* relative to the requested range."""
+    """Return the date sub-ranges not yet covered by *cached_df*.
+
+    Compares the requested date window against the min/max index of the cached
+    DataFrame and returns a list of ``(start, end)`` tuples representing the
+    gaps that still need to be fetched from the API.
+
+    Args:
+        requested_start: Inclusive start of the requested date range.
+        requested_end: Inclusive end of the requested date range.
+        cached_df: Previously cached DataFrame with a DatetimeIndex, or
+            ``None`` / empty if no cache entry exists.
+        temporal_api: ``"daily"`` or ``"hourly"`` — controls the granularity
+            of gap edges (1-day vs 1-hour steps).
+
+    Returns:
+        A list of ``(start, end)`` tuples. Returns a single-element list
+        covering the full requested range when the cache is empty or ``None``.
+        Returns an empty list when the cache fully covers the request.
+    """
     if cached_df is None or cached_df.empty:
         return [(requested_start, requested_end)]
 
@@ -238,7 +335,28 @@ def _fetch_and_parse(
     payload: dict[str, Any],
     temporal_api: Literal["daily", "hourly"],
 ) -> tuple[pd.DataFrame, int]:
-    """Perform a single GET request and return a ``(DataFrame, byte_count)`` tuple."""
+    """Execute a single GET request and return the parsed result.
+
+    Handles HTTP 400/422 error bodies with structured NASA POWER ``messages``
+    fields, raising an :class:`APIRequestError` with the joined message text.
+    Raises :class:`APIRequestError` on connection/timeout errors.
+
+    Args:
+        session: The :class:`requests.Session` to use.
+        url: Full NASA POWER API endpoint URL.
+        payload: Query parameter dict.
+        temporal_api: Temporal resolution — ``"daily"`` or ``"hourly"``.
+
+    Returns:
+        A ``(DataFrame, byte_count)`` tuple where *DataFrame* has a
+        :class:`~pandas.DatetimeIndex` named ``"date"`` and *byte_count* is
+        the raw response size in bytes. Returns ``(empty DataFrame, 0)`` if
+        the API response contains an ``"error"`` key.
+
+    Raises:
+        APIRequestError: If the request fails after all retries, or if the
+            server returns HTTP 400/422 with a parseable error message.
+    """
     try:
         resp = session.get(url, params=payload)
 
@@ -318,7 +436,29 @@ def _parse_json_response(resp: requests.Response) -> dict[str, Any]:
 def _response_to_dataframe(
     data: dict[str, Any], temporal_api: Literal["daily", "hourly"]
 ) -> pd.DataFrame:
-    """Parse the raw POWER JSON response into a DatetimeIndex DataFrame with fill-value NAs."""
+    """Parse a NASA POWER JSON response body into a DatetimeIndex DataFrame.
+
+    Extracts the ``properties.parameter`` dict from *data*, constructs a
+    :class:`~pandas.DataFrame` with date strings as the index, converts the
+    index to a :class:`~pandas.DatetimeIndex`, and replaces the NASA POWER
+    fill value ``-999`` with :data:`pandas.NA`.
+
+    Args:
+        data: Parsed JSON response dict. Expected structure:
+            ``{"properties": {"parameter": {param: {date_str: value}}}}``.
+        temporal_api: ``"daily"`` or ``"hourly"`` — determines the expected
+            date key format (``YYYYMMDD`` vs ``YYYYMMDDHH``).
+
+    Returns:
+        A :class:`~pandas.DataFrame` with a :class:`~pandas.DatetimeIndex`
+        named ``"date"`` and one numeric column per parameter. Missing values
+        are :data:`pandas.NA`. Returns an empty DataFrame if *data* contains
+        no parameter series.
+
+    Raises:
+        ValueError: If the date key format in the response is neither 8- nor
+            10-character (i.e. not ``YYYYMMDD`` or ``YYYYMMDDHH``).
+    """
     properties = data.get("properties", {}).get("parameter", {})
     if not properties:
         return pd.DataFrame()
@@ -372,7 +512,27 @@ def _ensure_all_params_in_df(df: pd.DataFrame, params: list[str]) -> pd.DataFram
 
 
 def _regional_response_to_dataframe(data: dict[str, Any]) -> pd.DataFrame:
-    """Parse a POWER regional GeoJSON FeatureCollection into a long-form DataFrame."""
+    """Parse a NASA POWER regional GeoJSON FeatureCollection into a long-form DataFrame.
+
+    Iterates over ``features``, extracting the ``geometry.coordinates``
+    (longitude, latitude, optional elevation) and the
+    ``properties.parameter`` time-series for each grid cell. Assembles a
+    long-form record list with columns ``date``, ``lat``, ``lon``,
+    optionally ``elevation``, and one column per parameter.
+
+    Args:
+        data: Parsed GeoJSON response dict. Expected structure::
+
+            {"features": [{"geometry": {"coordinates": [lon, lat]},
+                           "properties": {"parameter": {param: {date_str: value}}}}]}
+
+    Returns:
+        A long-form :class:`~pandas.DataFrame` indexed by ``"date"`` sorted
+        ascending, with columns ``"lat"``, ``"lon"``, optionally
+        ``"elevation"``, and one column per parameter. Missing values are
+        :data:`pandas.NA`. Returns an empty DataFrame if *data* has no
+        features or all features lack valid coordinates.
+    """
     features = data.get("features", [])
     if not features:
         return pd.DataFrame()
@@ -481,10 +641,38 @@ class RegionalRequest(PowerQuery):
 class PowerClient:
     """NASA POWER API client with SQLite caching, retry logic, and rate limiting.
 
+    ``PowerClient`` is the main entry point for fetching agroclimatic and
+    solar radiation data from the NASA POWER API. It handles the full request
+    lifecycle: coordinate normalisation, payload construction, cache lookup,
+    gap-aware partial fetching, response parsing, and cache update.
+
+    Typical usage::
+
+        from aidweather import PowerClient
+
+        client = PowerClient(temporal_api="daily")
+        df = client.get_point_data(
+            lat=-23.55, lon=-46.63,
+            start="2023-01-01", end="2023-01-31",
+            params=["T2M", "PRECTOTCORR"],
+        )
+
+    See the `User Guide <docs/user_guide.md>`_ and
+    `API Reference <docs/api_reference.md>`_ for complete usage examples.
+
     Attributes:
-        temporal_api: The temporal resolution of the API.
-        session: The session object used for making HTTP requests.
-        db_conn: The connection to the SQLite cache database, if caching is enabled.
+        temporal_api: Temporal resolution of the active API endpoint.
+            Either ``"daily"`` or ``"hourly"``.
+        base_url: Base URL for the point endpoint.
+        regional_base_url: Base URL for the regional bounding-box endpoint.
+        session: The :class:`requests.Session` used for all HTTP calls.
+        db_conn: Open :class:`sqlite3.Connection` to the cache database, or
+            ``None`` if caching is disabled or failed to initialise.
+        cache_cfg: Effective cache configuration dict from
+            :func:`~aidweather.config._Config.cache_config`.
+        api_limits: API limits dict from
+            :func:`~aidweather.config._Config.api_limits`.
+        rate_limiter: Active :class:`RateLimiter` instance.
     """
 
     def __init__(
@@ -492,11 +680,13 @@ class PowerClient:
         temporal_api: Literal["daily", "hourly"] = "daily",
         session: requests.Session | None = None,
     ):
-        """Initialise the client, configure caching, rate limiter, and session.
+        """Initialise the client, configure caching, rate limiter, and HTTP session.
 
         Args:
-            temporal_api: ``"daily"`` or ``"hourly"``.
-            session: Optional pre-configured session; a retry session is created if omitted.
+            temporal_api: Temporal resolution for all API calls made by this
+                instance. Must be ``"daily"`` or ``"hourly"``.
+            session: Optional pre-configured :class:`requests.Session`. A
+                retry-enabled session is created automatically if omitted.
 
         Raises:
             ValueError: If *temporal_api* is not ``"daily"`` or ``"hourly"``.
@@ -570,7 +760,26 @@ class PowerClient:
         start: Any,
         end: Any,
     ) -> None:
-        """Validate *params* list and date range; warn on unknown parameter codes."""
+        """Validate *params* and the date range; emit warnings for unknown parameter codes.
+
+        Checks that all codes in *params* are in the ``"all"`` parameter group
+        and that *start* does not exceed *end*. Unknown codes produce a
+        :class:`UserWarning` rather than raising, so that users can still
+        query experimental or less-documented parameters.
+
+        Args:
+            params: List of NASA POWER parameter codes to validate.
+            start: Start date in any form accepted by :func:`parse_date_strict`.
+            end: End date in any form accepted by :func:`parse_date_strict`.
+
+        Raises:
+            ValueError: If *start* is later than *end*.
+            AmbiguousDateError: If either date is a slash-separated string.
+
+        Warns:
+            UserWarning: If any code in *params* is not in the known parameter
+                catalogue.
+        """
         # Validate parameters
         known_params = set(cfg.params("all").keys())
         unknown = [p for p in params if p not in known_params]
@@ -683,7 +892,29 @@ class PowerClient:
         wind_elevation: float | None = None,
         wind_surface: float | None = None,
     ) -> dict[str, Any]:
-        """Build and return the query payload dict for a single-point API request."""
+        """Build the NASA POWER query parameter dict for a single-point request.
+
+        Args:
+            params: List of NASA POWER parameter codes.
+            start: Inclusive start date.
+            end: Inclusive end date.
+            lon: Longitude in decimal degrees.
+            lat: Latitude in decimal degrees.
+            elevation: Optional site elevation in metres above sea level.
+                Included in the payload as ``"site-elevation"`` when provided.
+            wind_elevation: Optional wind elevation in metres (10–300 m).
+                Included as ``"wind-elevation"`` when provided.
+            wind_surface: Optional wind surface identifier string. Included as
+                ``"wind-surface"`` when provided.
+
+        Returns:
+            A dict suitable for use as the ``params`` argument to
+            :meth:`requests.Session.get`.
+
+        Raises:
+            ValueError: If *wind_elevation* is outside [10, 300] or if *params*
+                exceeds the API parameter limit for the active endpoint.
+        """
         self._validate_request(params, is_regional=False)
         payload = {
             "parameters": ",".join(params),
@@ -788,7 +1019,33 @@ class PowerClient:
     def _fetch_data(
         self, base_payload: dict[str, Any], url: str | None = None
     ) -> pd.DataFrame:
-        """Orchestrate cache lookup, gap fetching, merge, and cache update for *base_payload*."""
+        """Orchestrate cache lookup, gap fetching, merge, and cache update.
+
+        This is the central data-retrieval method called by all public fetch
+        methods. When caching is enabled, it:
+
+        1. Computes the cache key from *base_payload*.
+        2. Reads any existing cached DataFrame from SQLite.
+        3. Determines which date sub-ranges are missing from the cache.
+        4. Fetches only the missing ranges from the API via
+           :meth:`_fetch_and_parse_ranges`.
+        5. Merges freshly fetched data with the cache, deduplicates, and
+           writes the combined result back to SQLite.
+        6. Returns the final DataFrame filtered to the requested window.
+
+        When caching is disabled, it performs a direct single API call.
+
+        Args:
+            base_payload: The full NASA POWER query parameter dict (with
+                ``"start"`` and ``"end"`` date keys).
+            url: Optional override for the endpoint URL. Defaults to
+                :attr:`base_url`.
+
+        Returns:
+            A :class:`~pandas.DataFrame` filtered to the requested date range.
+            Returns a NaN-filled DataFrame with the correct date index and
+            columns if no data was returned by the API.
+        """
         self._metrics["total_requests"] += 1
         fetch_url = url or self.base_url
         use_cache = self.cache_cfg.get("enabled", False) and self.db_conn
@@ -836,7 +1093,12 @@ class PowerClient:
         except OSError as e:
             fetch_failed = True
             # Do not swallow client-side validation or range errors (HTTP 400, 422)
-            if "Error (400)" in str(e) or "Error (422)" in str(e) or "400 Client Error" in str(e) or "422 Client Error" in str(e):
+            if (
+                "Error (400)" in str(e)
+                or "Error (422)" in str(e)
+                or "400 Client Error" in str(e)
+                or "422 Client Error" in str(e)
+            ):
                 raise
             if cached_df is not None:
                 logger.warning(
@@ -877,7 +1139,26 @@ class PowerClient:
         request: PointRequest | None = None,
         **kwargs,
     ) -> pd.DataFrame:
-        """Fetch time-series data for a single geographic point."""
+        """Fetch time-series weather data for a single geographic point.
+
+        Accepts either a :class:`PointRequest` object or keyword arguments
+        matching its fields. Delegates to
+        :meth:`get_point_data_from_coordinate` after normalising the
+        coordinate.
+
+        Args:
+            request: A pre-constructed :class:`PointRequest`. When provided,
+                all *kwargs* are ignored.
+            **kwargs: Keyword arguments forwarded to :class:`PointRequest`
+                when *request* is ``None``. Must include at least ``lat``,
+                ``lon``, ``start``, ``end``, and ``params``.
+
+        Returns:
+            A :class:`~pandas.DataFrame` with a :class:`~pandas.DatetimeIndex`
+            named ``"date"`` and one numeric column per requested parameter.
+            Missing values are :data:`pandas.NA`. Returns a NaN-filled frame
+            with the correct index if the API returned no data.
+        """
         if request is None:
             request = PointRequest(**kwargs)
 
@@ -894,7 +1175,7 @@ class PowerClient:
 
     def get_parameter_metadata(self, code: str | None = None) -> dict[str, Any]:
         """Return verified scientific metadata dictionary for *code* or all parameters if ``None``."""
-        return cfg.param_metadata(code)
+        return cfg.param_metadata(params=code)
 
     def get_point_data_from_coordinate(  # noqa: PLR0913
         self,
@@ -907,7 +1188,32 @@ class PowerClient:
         wind_surface: float | None = None,
         _validate: bool = True,
     ) -> pd.DataFrame:
-        """Fetch time-series data for a single point given a ``GeoCoordinate``."""
+        """Fetch time-series data for a single point given a :class:`~aidweather.geo.GeoCoordinate`.
+
+        This is the low-level point-fetch method. All other single-point
+        fetchers ultimately call this method.
+
+        Args:
+            coord: The geographic coordinate to query.
+            start: Inclusive start date.
+            end: Inclusive end date.
+            params: List of NASA POWER parameter codes.
+            elevation: Optional site elevation in metres.
+            wind_elevation: Optional wind elevation in metres (10–300 m).
+            wind_surface: Optional wind surface identifier.
+            _validate: If ``True`` (default), validates *params* and the date
+                range before fetching. Set to ``False`` in concurrent loops
+                where validation has already been performed once.
+
+        Returns:
+            A :class:`~pandas.DataFrame` indexed by ``"date"`` with one
+            numeric column per parameter. Missing values are
+            :data:`pandas.NA`. Returns a NaN-filled frame with the correct
+            index if the API returned no data.
+
+        Raises:
+            ValueError: If *params* is empty or exceeds API limits.
+        """
         if _validate:
             self._validate_inputs(params, start, end)
 
@@ -966,7 +1272,25 @@ class PowerClient:
         end: datetime | str | timedelta | pd.Timestamp,
         params: list[str],
     ) -> dict:
-        """Submits one Future per point and returns future→point mapping."""
+        """Submit one :class:`~concurrent.futures.Future` per point to *executor*.
+
+        Extracts ``lat``, ``lon``, and optional ``elevation`` /
+        ``wind_elevation`` / ``wind_surface`` from each point entry (dict or
+        sequence), then submits a call to
+        :meth:`get_point_data_from_coordinate` for each.
+
+        Args:
+            executor: Active :class:`~concurrent.futures.ThreadPoolExecutor`.
+            parsed_points: List of point dicts or ``(lat, lon[, elevation])``
+                tuples.
+            start: Inclusive start date for all points.
+            end: Inclusive end date for all points.
+            params: Parameter codes for all points.
+
+        Returns:
+            A ``{future: point}`` mapping for use with
+            :meth:`_collect_futures_results`.
+        """
         future_to_point: dict = {}
         for point in parsed_points:
             if isinstance(point, dict):
@@ -998,8 +1322,22 @@ class PowerClient:
     def _collect_futures_results(
         future_to_point: dict,
     ) -> tuple[list[pd.DataFrame], list]:
-        """Collects completed futures into result DataFrames and a list of
-        ``(point, error_message)`` pairs for points whose fetch raised."""
+        """Collect completed futures into result DataFrames and failed-point records.
+
+        Iterates :func:`~concurrent.futures.as_completed` over
+        *future_to_point*, appending successful results (with ``lat``/``lon``
+        metadata columns injected) to *all_results* and recording exceptions as
+        ``(point, error_message)`` pairs in *failed_points*.
+
+        Args:
+            future_to_point: ``{future: point}`` mapping produced by
+                :meth:`_submit_point_futures`.
+
+        Returns:
+            A ``(all_results, failed_points)`` tuple where *all_results* is a
+            list of per-point DataFrames (indexed by ``"date"``) and
+            *failed_points* is a list of ``(point, error_str)`` pairs.
+        """
         all_results: list[pd.DataFrame] = []
         failed_points: list = []
 
@@ -1050,10 +1388,39 @@ class PowerClient:
             ]
         ],
     ]:
-        """Fetch data for multiple geographic points in parallel.
+        """Fetch weather data for multiple geographic points in parallel.
 
-        Returns a ``(DataFrame, failed)`` tuple where *failed* is a list of
-        ``(point, error_message)`` pairs for any points whose fetch raised.
+        Uses a :class:`~concurrent.futures.ThreadPoolExecutor` to issue
+        concurrent calls to :meth:`get_point_data_from_coordinate`. The
+        ``max_workers`` count is silently clamped to the configured
+        ``api_limits.max_workers`` ceiling (default 5) to comply with NASA
+        POWER API guidelines.
+
+        Args:
+            points: One of:
+
+                - A :class:`~pandas.DataFrame` with at least ``"lat"`` and
+                  ``"lon"`` columns (and optionally ``"name"``, ``"elevation"``).
+                - A list of dicts with at least ``"lat"`` and ``"lon"`` keys.
+                - A list of ``(lat, lon)`` or ``(lat, lon, elevation)`` tuples.
+
+            start: Inclusive start date for all points.
+            end: Inclusive end date for all points.
+            params: List of NASA POWER parameter codes.
+            max_workers: Maximum number of concurrent fetch threads. Clamped
+                to the configured API limit (default 5).
+            _validate: If ``True`` (default), validates *params* and the date
+                range before dispatching.
+
+        Returns:
+            A ``(DataFrame, failed_points)`` tuple where:
+
+            - *DataFrame* has a ``"date"`` column (reset from index), ``"lat"``
+              and ``"lon"`` columns, optional ``"name"`` and ``"elevation"``
+              columns, and one numeric column per parameter. An empty DataFrame
+              is returned if all points failed.
+            - *failed_points* is a list of ``(point, error_message)`` pairs for
+              any points whose fetch raised an exception.
         """
         if _validate:
             self._validate_inputs(params, start, end)
@@ -1164,7 +1531,22 @@ class PowerClient:
         return table
 
     def summarize(self, df: pd.DataFrame) -> None:
-        """Print a Rich summary panel with data profile, transfer metrics, and request statistics."""
+        """Print a Rich summary panel with data profile, transfer metrics, and request statistics.
+
+        Renders four :class:`~rich.panel.Panel` blocks to the console:
+
+        - **Weather Data Profile**: temporal resolution, date range, row count,
+          missing-value count, and parameter list.
+        - **Transfer & Cache Performance**: network duration, bytes downloaded,
+          average speed, and cache size delta.
+        - **Request Statistics**: total logical requests, cache hits, network
+          API calls, and cache hit rate.
+        - **NASA POWER Connection Info**: user-agent string and base URL.
+
+        Args:
+            df: The result DataFrame returned by any ``get_*_data`` method.
+                Used to populate the data profile section.
+        """
         console = Console()
         console.print(Panel(self._build_profile_table(df), subtitle="Data Insight"))
         console.print(Panel(self._build_perf_table(), subtitle="Performance"))
@@ -1235,11 +1617,37 @@ class PowerClient:
         request: RegionalRequest | None = None,
         _validate: bool = True,
     ) -> pd.DataFrame:
-        """Fetch data for a geographic bounding box via the regional API.
+        """Fetch daily weather data for a geographic bounding box.
+
+        Returns a long-form DataFrame with one row per (date, grid cell) pair.
+        When *request* is provided it takes full precedence over the positional
+        coordinate arguments (a :class:`UserWarning` is emitted to make the
+        precedence explicit).
+
+        Args:
+            lat_min: Southern boundary of the bounding box (latitude).
+            lat_max: Northern boundary of the bounding box (latitude).
+            lon_min: Western boundary of the bounding box (longitude).
+            lon_max: Eastern boundary of the bounding box (longitude).
+            start: Inclusive start date.
+            end: Inclusive end date.
+            params: List with exactly one NASA POWER parameter code (the
+                regional API supports only one parameter per request).
+            request: Optional :class:`RegionalRequest` that supersedes all
+                positional arguments when provided.
+            _validate: If ``True`` (default), validates *params* and dates
+                before fetching.
+
+        Returns:
+            A long-form :class:`~pandas.DataFrame` indexed by ``"date"`` with
+            columns ``"lat"``, ``"lon"``, optionally ``"elevation"``, and one
+            numeric column for the requested parameter. Missing values are
+            :data:`pandas.NA`.
 
         Raises:
-            ValueError: If the box exceeds 4.5° on either axis or more than one parameter
-                is requested.
+            ValueError: If the bounding box exceeds 4.5° on either axis,
+                if ``lat_min >= lat_max`` or ``lon_min >= lon_max``, or if
+                more than one parameter is requested.
         """
         if request is not None:
             warnings.warn(
@@ -1279,7 +1687,22 @@ class PowerClient:
         end: str,
         params: list[str],
     ) -> pd.DataFrame:
-        """Fetch regional data using two corner ``GeoCoordinate`` objects (SW and NE)."""
+        """Fetch regional data using two corner :class:`~aidweather.geo.GeoCoordinate` objects.
+
+        Convenience wrapper over :meth:`get_regional_data` that accepts
+        South-West and North-East corner coordinates instead of four separate
+        float bounds.
+
+        Args:
+            coord_sw: South-West corner of the bounding box.
+            coord_ne: North-East corner of the bounding box.
+            start: Inclusive start date string.
+            end: Inclusive end date string.
+            params: List with exactly one NASA POWER parameter code.
+
+        Returns:
+            See :meth:`get_regional_data`.
+        """
         lat_sw, lon_sw = coord_sw.as_decimal()
         lat_ne, lon_ne = coord_ne.as_decimal()
         return self.get_regional_data(
@@ -1304,10 +1727,36 @@ class PowerClient:
         spacing_km: float | None,
         params: list[str] | None = None,
     ) -> int:
-        """Resolve the number of transect sample points based on parameter native spatial resolution.
+        """Determine the number of sample points for a transect request.
+
+        Resolves the sampling density from *num_points* or *spacing_km*,
+        then clamps the result to the minimum effective spacing derived from
+        the native grid resolution of the requested parameters. This prevents
+        sub-resolution requests that would return duplicate data.
+
+        Clamping logic: the minimum effective spacing equals the latitude step
+        of the finest native grid among the requested parameters (MERRA-2:
+        0.5° ≈ 55.5 km; CERES: 1.0° ≈ 111.1 km). If the derived spacing is
+        finer than the minimum, ``num_points`` is silently clamped and a
+        diagnostic log message is emitted.
+
+        Args:
+            start_coord: Starting endpoint of the transect.
+            end_coord: Ending endpoint of the transect.
+            num_points: Explicit number of sample points. Takes priority over
+                *spacing_km* when both are provided.
+            spacing_km: Approximate distance between samples in kilometres.
+                Used to compute *num_points* when that argument is ``None``.
+            params: Optional list of parameter codes used to derive the minimum
+                grid spacing. Defaults to MERRA-2 resolution when ``None``.
+
+        Returns:
+            The resolved (and possibly clamped) number of sample points,
+            always at least ``2``.
 
         Raises:
-            ValueError: If neither *num_points* nor *spacing_km* is provided.
+            ValueError: If neither *num_points* nor *spacing_km* is provided,
+                or if *spacing_km* is not positive.
         """
         # Great-circle distance approximation between the two endpoints
         lat1, lon1 = start_coord.as_decimal()
@@ -1377,11 +1826,31 @@ class PowerClient:
         _validate: bool = True,
         **kwargs,
     ) -> pd.DataFrame:
-        """Sample *n* points along a transect and fetch data for each in parallel.
+        """Sample points along a 1D transect and fetch data for each in parallel.
+
+        Resolves the sample points via :meth:`_resolve_transect_num_points`
+        (which enforces minimum grid-resolution spacing), then delegates to
+        :meth:`get_multi_point_data`.
+
+        Args:
+            request: A pre-constructed :class:`TransectRequest`. When
+                provided, all *kwargs* are ignored.
+            _validate: If ``True`` (default), validates params and date range
+                before dispatching.
+            **kwargs: Forwarded to :class:`TransectRequest` when *request* is
+                ``None``. Must include at least ``start_coord``, ``end_coord``,
+                ``start``, ``end``, ``params``, and either ``num_points`` or
+                ``spacing_km``.
+
+        Returns:
+            A :class:`~pandas.DataFrame` with columns ``"date"``, ``"lat"``,
+            ``"lon"``, ``"name"`` (``"Point_1"``, ``"Point_2"``, …), and one
+            numeric column per parameter. Indexed by row number (not date).
 
         Raises:
             ValueError: If neither ``num_points`` nor ``spacing_km`` is given.
-            OSError: If fetching data for all generated points fails.
+            OSError: If fetching data for **all** generated transect points
+                fails (partial failures are silently dropped).
         """
         if request is None:
             request = TransectRequest(**kwargs)
@@ -1457,7 +1926,27 @@ class PowerClient:
         spacing_km: float | None = None,
         max_workers: int = 5,
     ) -> pd.DataFrame:
-        """Fetch transect data using two ``GeoCoordinate`` endpoints instead of a ``TransectRequest``."""
+        """Fetch transect data using two :class:`~aidweather.geo.GeoCoordinate` endpoints.
+
+        Convenience wrapper over :meth:`get_transect_data` for callers that
+        already hold :class:`~aidweather.geo.GeoCoordinate` objects and prefer
+        not to construct a :class:`TransectRequest` manually.
+
+        Args:
+            coord_a: Starting endpoint of the transect.
+            coord_b: Ending endpoint of the transect.
+            start: Inclusive start date string.
+            end: Inclusive end date string.
+            params: List of NASA POWER parameter codes.
+            num_points: Explicit number of sample points. Takes priority over
+                *spacing_km* when both are provided.
+            spacing_km: Approximate spacing between samples in kilometres.
+            max_workers: Maximum concurrent fetch threads (clamped to the
+                configured API limit).
+
+        Returns:
+            See :meth:`get_transect_data`.
+        """
         return self.get_transect_data(
             TransectRequest(
                 start_coord=coord_a,

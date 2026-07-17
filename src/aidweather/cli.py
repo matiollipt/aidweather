@@ -108,7 +108,14 @@ def main(
         ),
     ] = False,
 ) -> None:
-    """CLI entry point."""
+    """AidWeather — fetch agroclimatic data from NASA POWER.
+
+    Global options (``--version``, ``--verbose``) are processed here before
+    any sub-command runs. When ``--verbose`` is set, a
+    :class:`logging.StreamHandler` is attached to the ``aidweather`` logger
+    at ``INFO`` level so that cache hits, API calls, and rate-limiter events
+    are visible in the terminal.
+    """
     if verbose:
         package_logger = logging.getLogger("aidweather")
         if not any(type(h) is logging.StreamHandler for h in package_logger.handlers):
@@ -140,7 +147,26 @@ def _validate_resolution(resolution: str) -> None:
 
 
 def _resolve_output_format(output: Path | None, fmt: str | None) -> str:
-    """Resolve output format from file extension first, then --format."""
+    """Determine the effective output format from the file extension and ``--format`` flag.
+
+    Priority:
+
+    1. If *output* has a recognised extension (``.csv``, ``.json``,
+       ``.parquet``, ``.pq``), that extension's format takes precedence over
+       *fmt*. A warning is printed when both are supplied and disagree.
+    2. If *output* has no recognised extension, *fmt* is used.
+    3. If neither provides a format, ``"csv"`` is the default.
+
+    Args:
+        output: Optional destination path provided via ``--output``.
+        fmt: Optional explicit format string provided via ``--format``.
+
+    Returns:
+        One of ``"csv"``, ``"json"``, or ``"parquet"``.
+
+    Raises:
+        :class:`typer.BadParameter`: If *fmt* is not a recognised format string.
+    """
     fmt_normalized = fmt.lower() if fmt else None
     if fmt_normalized is not None and fmt_normalized not in _SUPPORTED_OUTPUT_FORMATS:
         raise typer.BadParameter(
@@ -162,7 +188,23 @@ def _resolve_output_format(output: Path | None, fmt: str | None) -> str:
 
 
 def _save_output(df: pd.DataFrame, output: Path | None, fmt: str | None) -> None:
-    """Write DataFrame to the specified format."""
+    """Write *df* to *output* in the format resolved from *output* and *fmt*.
+
+    Creates intermediate directories automatically. Prints a styled success
+    or error message to the Rich console. When ``resolved_fmt == "json"``,
+    resets a named index to a column before serialising so that the date is
+    included in the JSON records.
+
+    Args:
+        df: The DataFrame to write.
+        output: Destination path. If ``None``, the function returns immediately
+            (no file is written).
+        fmt: Optional explicit format string (``"csv"``, ``"json"``,
+            ``"parquet"``). Forwarded to :func:`_resolve_output_format`.
+
+    Raises:
+        :class:`typer.Exit` (code 1): If writing to disk fails.
+    """
     if output is None:
         return
 
@@ -247,7 +289,16 @@ def fetch(  # noqa: PLR0913
         bool, typer.Option("--summarize", help="Print summary panel.")
     ] = False,
 ):
-    """Fetch weather data for a single geographic point."""
+    """Fetch weather data for a single geographic point.
+
+    Contacts the NASA POWER point API for the given ``--lat`` / ``--lon``
+    coordinate and date range, then optionally previews the result, prints a
+    summary panel, and saves the data to disk.
+
+    Latitude and longitude metadata columns are injected into the output
+    DataFrame so that the result has the same schema as ``fetch-multi``
+    and ``fetch-transect`` outputs.
+    """
     param_list = [p.strip() for p in params.split(",") if p.strip()]
     parsed_start = _parse_date(start)
     parsed_end = _parse_date(end)
@@ -344,7 +395,15 @@ def fetch_multi(  # noqa: PLR0913
         bool, typer.Option("--summarize", help="Print summary panel.")
     ] = False,
 ):
-    """Fetch weather data for multiple geographic points from a CSV file."""
+    """Fetch weather data for multiple geographic points from a CSV file.
+
+    Reads a CSV file supplied via ``--points-file`` that must contain at
+    least ``lat`` and ``lon`` columns. Additional columns such as ``name``,
+    ``elevation``, ``wind_elevation``, and ``wind_surface`` are forwarded
+    to the API when present. Points are fetched in parallel using a
+    thread pool; ``--workers`` controls concurrency (NASA recommends ≤55).
+    Failed points are reported on the console without aborting the run.
+    """
     param_list = [p.strip() for p in params.split(",") if p.strip()]
     parsed_start = _parse_date(start)
     parsed_end = _parse_date(end)
@@ -628,7 +687,12 @@ def params_list(
         ),
     ] = "default",
 ):
-    """List available NASA POWER parameters."""
+    """List available NASA POWER parameters.
+
+    Reads the parameter catalogue from the bundled ``config.json`` and renders
+    a Rich table with the parameter code and short name for every entry in the
+    requested *group*. Use ``--group all`` to see the full catalogue.
+    """
     available_groups = cfg.param_groups()
     if group not in available_groups:
         avail_str = ", ".join(available_groups)
@@ -659,7 +723,12 @@ def params_describe(
         str, typer.Argument(help="Parameter code to describe (e.g., T2M).")
     ],
 ):
-    """Print the full science description for a given parameter code."""
+    """Print the full science description for a given parameter code.
+
+    Looks up *code* (case-insensitive) in the ``param_descriptions`` section
+    of ``config.json`` and prints the full descriptive string. Useful for
+    understanding what a parameter physically represents before requesting it.
+    """
     descriptions = cfg.param_descriptions()
 
     # Allow case-insensitive lookups
@@ -677,7 +746,12 @@ def params_describe(
 
 @cache_app.command("info")
 def cache_info():
-    """Show details about the local SQLite cache."""
+    """Show details about the local SQLite cache.
+
+    Displays the cache configuration (enabled flag and resolved path), then,
+    if the database file exists, reports file size, number of cached entries,
+    oldest/newest entry timestamps, and total compressed data volume.
+    """
     cache_cfg = cfg.cache_config()
     enabled = cache_cfg.get("enabled", False)
     cache_dir = cache_cfg.get("path", ".")
@@ -734,7 +808,13 @@ def cache_clear(
         bool, typer.Option("--yes", "-y", help="Confirm deletion without prompting.")
     ] = False,
 ):
-    """Clear the local SQLite cache."""
+    """Clear the local SQLite cache by deleting the database file.
+
+    Requires confirmation unless ``--yes`` / ``-y`` is passed. The database
+    file path is resolved from the active cache configuration (env var
+    override or ``config.json`` path). If the file does not exist, the
+    command exits cleanly without an error.
+    """
     cache_cfg = cfg.cache_config()
     cache_dir = cache_cfg.get("path", ".")
     db_path = Path(cache_dir) / "aidweather_cache.db"
