@@ -1,5 +1,5 @@
 # aidweather
-![aidweather](https://raw.githubusercontent.com/matiollipt/aidweather/main/img/aidweather-logo-transparent.png)
+![aidweather](https://raw.githubusercontent.com/matiollipt/aidweather/main/docs/img/aidweather-logo-transparent.png)
 
 **Agroclimatic & Solar Data Integration from NASA POWER**
 
