@@ -1,33 +1,32 @@
 # User Guide — `aidweather`
 
-This guide explains how to retrieve, clean, and work with NASA POWER agroclimatic data using `aidweather`.
+This guide provides a practical walkthrough for retrieving, cleaning, and analyzing NASA POWER agroclimatic data using `aidweather`.
 
 ---
 
 ## 1. Core Concepts
 
-`aidweather` acts as a scientific bridge to the official [NASA POWER API](https://power.larc.nasa.gov/).
+`aidweather` acts as a scientific bridge between your local environment and the official [NASA POWER API](https://power.larc.nasa.gov/). It simplifies data access while enforcing scientific integrity:
 
-Key properties:
-- **No Station Interpolation**: Returned numbers reflect satellite and reanalysis model grid cells (e.g. MERRA-2, CERES), not direct weather station observations.
-- **Explicit Missing Values**: Missing values or undocumented records are converted directly to pandas `NaN` (or `pd.NA`). `aidweather` never silently fills, interpolates, or forward-fills missing observation dates or parameters.
-- **SQLite Cache**: API queries are cached locally in SQLite to prevent duplicate network traffic and respect NASA POWER API guidelines.
+- **Model & Satellite Grid Data (Not Weather Stations)**: Returned values originate from global reanalysis models and satellite observations (such as MERRA-2 and CERES), representing spatial cell averages rather than direct measurements from ground-based weather stations.
+- **Explicit Missing Values**: Missing observations or unrecorded dates are explicitly converted to pandas `NaN` (or `pd.NA`). `aidweather` never silently fills, interpolates, or forward-fills missing dates or values, ensuring your downstream statistics remain untainted.
+- **SQLite Caching Layer**: API requests are automatically cached locally in SQLite to eliminate redundant downloads, save network bandwidth, and abide by NASA POWER server usage guidelines.
 
 ---
 
 ## 2. Temporal Resolutions
 
-`PowerClient` supports two primary temporal endpoints:
-- `temporal_api="daily"`: Daily mean, minimum, maximum, and integrated values (1981-present for meteorology, 1984-present for solar).
-- `temporal_api="hourly"`: Hourly timestamped data (2001-present).
+`PowerClient` supports two primary temporal resolution endpoints:
+- `temporal_api="daily"`: Daily means, minimums, maximums, and integrated daily sums (available 1981–present for meteorology, 1984–present for solar radiation).
+- `temporal_api="hourly"`: Hourly timestamped data series (available 2001–present).
 
 ```python
 from aidweather import PowerClient
 
-# Daily client
+# Daily client for historical daily summaries
 daily_client = PowerClient(temporal_api="daily")
 
-# Hourly client
+# Hourly client for sub-daily time series
 hourly_client = PowerClient(temporal_api="hourly")
 ```
 
@@ -35,7 +34,7 @@ hourly_client = PowerClient(temporal_api="hourly")
 
 ## 3. Querying Point Data
 
-Use `get_point_data` or `get_point_data_from_coordinate`:
+To fetch weather data for a single location, use `get_point_data` or `get_point_data_from_coordinate`:
 
 ```python
 from aidweather import PowerClient, GeoCoordinate
@@ -48,13 +47,14 @@ df = client.get_point_data_from_coordinate(
     start="2023-01-01",
     end="2023-01-31",
     params=["T2M", "T2M_MAX", "T2M_MIN", "PRECTOTCORR"],
+)
 ```
 
 ---
 
 ## 4. Multi-Point Queries
 
-When retrieving data for multiple field locations, use `get_multi_point_data` to execute parallel async-managed requests:
+When retrieving weather data for multiple field locations or farm sites, use `get_multi_point_data` to run managed concurrent requests in parallel:
 
 ```python
 points = [
@@ -75,7 +75,7 @@ df_multi, failed = client.get_multi_point_data(
 
 ## 5. 1D Transect Queries
 
-To sample along a transect between two geographic coordinates:
+To sample weather parameters along a linear path between two geographic locations (e.g. across a river basin or agricultural gradient), use `get_transect_data`:
 
 ```python
 coord_start = GeoCoordinate.from_decimal(-25.0, -48.0)
@@ -92,13 +92,13 @@ df_transect = client.get_transect_data(
 ```
 
 > [!NOTE]
-> `aidweather` automatically clamps transect point sampling to prevent sub-resolution duplication. The effective minimum spacing is derived from the finest native resolution of the requested parameters.
+> `aidweather` automatically clamps sampling points along a transect to prevent sub-resolution duplication. The minimum effective sampling distance is determined by the native grid resolution of the requested parameters.
 
 ---
 
 ## 6. Regional Bounding-Box Queries
 
-The regional endpoint returns grid cell series over a 2D bounding box:
+To extract grid cell time series across a 2D geographic region, use `get_regional_data`:
 
 ```python
 df_regional = client.get_regional_data(
@@ -118,14 +118,13 @@ df_regional = client.get_regional_data(
 
 ## 7. Working with Output DataFrames & Date Utilities
 
-Point queries in `PowerClient` return DataFrames with a `DatetimeIndex` named `"date"`. To convert the index to an explicit `datetime64[ns]` column (e.g. for joins or CSV exports) or standardise heterogeneous date columns across input files, use `ensure_date_column`:
+Point queries in `PowerClient` return DataFrames indexed by a `DatetimeIndex` named `"date"`. To convert the index into an explicit `datetime64[ns]` column (useful for merging, exporting to CSV, or joining with external datasets) or to standardize date columns across input files, use `ensure_date_column`:
 
 ```python
 from aidweather.utils import ensure_date_column
 
-# Convert DatetimeIndex or alternative column ('timestamp', 'dt') into a 'date' column
+# Convert DatetimeIndex or alternative columns ('timestamp', 'time') into a canonical 'date' column
 df_flat = ensure_date_column(df, name="date", candidates=["timestamp", "time"])
 ```
 
-See the [DataFrame Date Utilities Reference](utils_reference.md) for full details on candidate searching, timezone stripping, and `DateColumnOptions`.
-
+See the [DataFrame Date Utilities Reference](utils_reference.md) for full details on candidate resolution, timezone handling, and `DateColumnOptions`.

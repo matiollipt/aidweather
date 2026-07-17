@@ -1,16 +1,16 @@
 # Configuration Reference — `aidweather`
 
-This document describes configuration loading, environment variables, SQLite caching, and parameter metadata schemas.
+This document describes configuration loading, environment variables, SQLite caching mechanisms, and parameter metadata schemas in `aidweather`.
 
 ---
 
 ## 1. Environment Variables
 
-`aidweather` respects the following environment variables:
+`aidweather` recognizes the following environment variables to customize local storage and test execution:
 
 | Variable | Description | Default Path |
 | :--- | :--- | :--- |
-| `AIDWEATHER_CACHE_DIR` | Custom directory path for local SQLite cache database. | Platform XDG cache (`~/.cache/aidweather`) |
+| `AIDWEATHER_CACHE_DIR` | Custom directory path for the local SQLite cache database. | Platform XDG cache (`~/.cache/aidweather`) |
 | `AIDWEATHER_LOG_DIR` | Custom directory path for `aidweather.log` file outputs. | Platform XDG log dir (`~/.cache/aidweather`) |
 | `AIDWEATHER_RUN_LIVE_TESTS` | Set to `1` to allow live NASA POWER API test suite execution. | Unset (`0`) |
 
@@ -21,15 +21,15 @@ This document describes configuration loading, environment variables, SQLite cac
 Location: `<AIDWEATHER_CACHE_DIR>/aidweather_cache.db`
 
 ### Table: `cache`
-- `key` (`TEXT PRIMARY KEY`): SHA-256 hash prefixed with `v1_` generated from payload parameters (`temporal_api`, `parameters`, `latitude`, `longitude`, `elevation`, `wind-elevation`, `wind-surface`, `community`, `time-standard`).
-- `data` (`BLOB`): Gzip-compressed JSON string of fetched time-series records.
+- `key` (`TEXT PRIMARY KEY`): SHA-256 hash digest prefixed with `v1_`, generated from payload parameters (`temporal_api`, `parameters`, `latitude`, `longitude`, `elevation`, `wind-elevation`, `wind-surface`, `community`, `time-standard`).
+- `data` (`BLOB`): Gzip-compressed JSON payload containing fetched time-series records.
 - `timestamp` (`DATETIME`): Access timestamp of the cached record.
 
 ```bash
-# Check cache metrics
+# Inspect local cache statistics
 aidweather cache info
 
-# Clear cache database
+# Clear local cache database
 aidweather cache clear --yes
 ```
 
@@ -37,7 +37,7 @@ aidweather cache clear --yes
 
 ## 3. Bundled `config.json` Asset Schema
 
-`aidweather` bundles `src/aidweather/assets/config.json` containing base API URLs, parameter groups, and parameter metadata dictionaries:
+`aidweather` bundles `src/aidweather/assets/config.json`, which defines base API endpoints, parameter groupings, and parameter metadata dictionaries:
 
 ```json
 {

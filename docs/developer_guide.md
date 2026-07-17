@@ -1,6 +1,6 @@
 # Developer & Architecture Guide — `aidweather`
 
-This document details the internal design patterns, request lifecycles, and cache identity mechanisms for `aidweather` contributors.
+This document details internal design patterns, request lifecycles, and cache key generation mechanisms for `aidweather` developers and contributors.
 
 ---
 
@@ -37,13 +37,13 @@ def _make_cache_key(payload: dict[str, Any], temporal_api: str = "daily") -> str
     return "v1_" + hashlib.sha256(encoded).hexdigest()
 ```
 
-By excluding `start` and `end` dates from `key_payload`, `aidweather` tracks cached date ranges per spatial payload and fetches only missing date segments.
+By excluding `start` and `end` dates from `key_payload`, `aidweather` tracks cached date ranges per spatial payload and fetches only missing date segments during subsequent queries.
 
 ---
 
-## 3. Data Invariants
+## 3. Core Data Invariants
 
-Contributors must maintain the following non-negotiable data invariants:
+Contributors must maintain the following core data invariants:
 1. **Never Impute Missing Data**: Missing values from NASA POWER (fill code `-999`) must be converted strictly to explicit pandas missing values (`pd.NA` / `np.nan`). Never apply forward-filling (`ffill`), backward-filling (`bfill`), or linear interpolation.
-2. **Preserve Original Units**: Do not apply silent unit conversions. Units returned by NASA POWER must be preserved and disclosed in parameter metadata.
-3. **Preserve Coordinate Precision**: Coordinates must retain at least 4 decimal places precision.
+2. **Preserve Original Units**: Do not apply silent unit conversions. Units returned by NASA POWER must be preserved and explicitly documented in parameter metadata.
+3. **Preserve Coordinate Precision**: Coordinates must retain at least 4 decimal places of precision across internal operations.

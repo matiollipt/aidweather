@@ -43,7 +43,7 @@ def get_point_data_from_coordinate(
     wind_surface: float | None = None,
 ) -> pd.DataFrame:
 ```
-Fetches single-point data using a `GeoCoordinate` instance. Returns a DataFrame indexed by `date`.
+Fetches single-point weather data using a `GeoCoordinate` object. Returns a DataFrame indexed by `date`.
 
 #### `get_multi_point_data`
 ```python
@@ -56,7 +56,7 @@ def get_multi_point_data(
     max_workers: int = 5,
 ) -> tuple[pd.DataFrame, list[tuple[Any, str]]]:
 ```
-Fetches data concurrently for multiple points. Returns `(df, failed_points)`.
+Fetches weather data concurrently for multiple geographic points. Returns a tuple of `(df, failed_points)`.
 
 #### `get_transect_data`
 ```python
@@ -66,7 +66,7 @@ def get_transect_data(
     **kwargs,
 ) -> pd.DataFrame:
 ```
-Samples points along a straight 1D path. Automatically clamps sample points if spacing is sub-resolution.
+Samples weather parameters along a straight 1D transect path. Automatically clamps sample points to prevent sub-resolution duplication.
 
 #### `get_regional_data`
 ```python
@@ -81,19 +81,19 @@ def get_regional_data(
     params: list[str],
 ) -> pd.DataFrame:
 ```
-Queries a 2D regional bounding box (max 4.5° × 4.5°, 1 parameter).
+Queries a 2D regional bounding box (maximum spatial span 4.5° × 4.5°, 1 parameter per call).
 
 #### `get_parameter_metadata`
 ```python
 def get_parameter_metadata(self, code: str | None = None) -> dict[str, Any]:
 ```
-Returns structured parameter metadata (short name, units, source family, native grid, availability) for `code` or all parameters if `None`.
+Returns structured parameter metadata (short name, units, source family, native grid, and temporal availability) for a specified parameter `code`, or for all parameters if `code` is `None`.
 
 #### `summarize`
 ```python
 def summarize(self, df: pd.DataFrame) -> None:
 ```
-Prints a styled Rich report with transfer metrics, profile statistics, and connection diagnostic information.
+Displays a formatted Rich console summary report detailing transfer metrics, summary statistics, and connection diagnostic information.
 
 ---
 
@@ -108,7 +108,7 @@ class GeoCoordinate:
 
 ### Classmethods
 - `from_decimal(lat: float, lon: float) -> GeoCoordinate`
-- `from_strings(lat_str: str, lon_str: str) -> GeoCoordinate` (auto-detects DD, DDM, DMS)
+- `from_strings(lat_str: str, lon_str: str) -> GeoCoordinate` (Auto-detects DD, DDM, or DMS string formats)
 - `from_dd_str(lat_str, lon_str)`
 - `from_ddm_str(lat_str, lon_str)`
 - `from_dms_str(lat_str, lon_str)`
@@ -135,4 +135,3 @@ class GeoCoordinate:
 
 - `ensure_date_column(df, name="date", *, inplace=False, candidates=None, index_fallback=True, normalize=False, strip_timezone=True) -> pd.DataFrame`
 - `DateColumnOptions(inplace=False, candidates=None, index_fallback=True, normalize=False, strip_timezone=True)`
-

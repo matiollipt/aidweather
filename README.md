@@ -2,7 +2,13 @@
 
 **Agroclimatic & Solar Data Integration from NASA POWER**
 
-`aidweather` is a Python package for fetching, caching, and analyzing meteorological and solar radiation data from [NASA's POWER API](https://power.larc.nasa.gov/). It provides structured parameter metadata, parameter-aware spatial sampling along 1D transects, bounding-box queries, SQLite request caching, and geospatial coordinate parsing.
+`aidweather` bridges your project with reliable weather and solar radiation data from [NASA's POWER API](https://power.larc.nasa.gov/). Key features include:
+
+1. **Seamless NASA POWER Integration**: Serves as a bridge between your application and NASA POWER weather services, hiding the complexities of constructing API requests, handling timeouts, and verifying payload structures.
+2. **Versatile Spatial Fetching**: Flexible data retrieval across single points, 1D transect paths, and 2D regional bounding boxes, with internal tuning levers to ensure accurate and consistent spatial sampling.
+3. **SQLite Caching & API Compliance**: Built-in SQLite caching prevents redundant downloads, saving bandwidth and avoiding unnecessary hits to NASA POWER servers while enforcing rate limits and data usage policies.
+4. **Python Bindings & Full CLI**: Dual interface offering an intuitive Python API for data science workflows and a full-featured Command Line Interface (CLI) for quick command-line extractions.
+5. **Smart Error Catching & Logging**: Comprehensive activity logging and intelligent error handling, providing clear insights into query execution and data processing.
 
 > [!WARNING]
 > **Beta Status:** `aidweather` is in active beta. Public API methods and CLI options are stable, but additions may occur prior to 1.0. Feedback and [issue reports](https://github.com/matiollipt/aidweather/issues) are welcome.
@@ -14,7 +20,7 @@
 
 ## Supported NASA POWER Parameters
 
-`aidweather` provides built-in metadata, unit validation, and spatial grid specifications for 15 core parameters across meteorological and radiative families:
+`aidweather` includes built-in metadata, unit validation, and spatial grid specifications for 15 core weather and solar radiation parameters:
 
 | Code | Parameter Name | Source Product | Native Grid (Lat × Lon) | Daily Unit | Hourly Unit |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -60,17 +66,17 @@ uv tool install git+https://github.com/matiollipt/aidweather.git
 
 ## Documentation Guides
 
-The documentation is organized into dedicated scientific and developer reference guides:
+The documentation is organized into dedicated guides for scientific users and developers:
 
-- [User Guide](docs/user_guide.md) — Comprehensive guide for scientific users and data analysts.
-- [Spatial Interpretation Guide](docs/spatial_interpretation.md) — Native resolution grids, transects, regional boxes, and station comparisons.
-- [Parameter & Provenance Guide](docs/parameter_provenance.md) — Complete catalogue, source product lineage, temporal ranges, and time standards.
-- [Geospatial Coordinate Reference](docs/geo_reference.md) — DD, DDM, and DMS notation systems, `GeoCoordinate` construction, string parsing, Unicode handling, and ambiguity policies.
-- [DataFrame Date Utilities Reference](docs/utils_reference.md) — `ensure_date_column`, candidate matching, DatetimeIndex fallback, timezone handling, and `DateColumnOptions`.
-- [API Reference](docs/api_reference.md) — Complete python reference for `PowerClient`, `GeoCoordinate`, and query functions.
-- [Configuration Reference](docs/config_reference.md) — Environment variables, JSON assets, and SQLite cache layout.
-- [Developer Guide](docs/developer_guide.md) — Cache key versioning, request lifecycles, and architecture notes.
-- [Contributing & Testing](docs/contributing.md) — Quality standards, `pytest` invocation, and mypy typing.
+- [User Guide](docs/user_guide.md) — Step-by-step introduction to fetching and analyzing weather data.
+- [Spatial Interpretation Guide](docs/spatial_interpretation.md) — Understanding native grid resolutions, transects, regional boxes, and station comparisons.
+- [Parameter & Provenance Guide](docs/parameter_provenance.md) — Parameter catalogue, NASA source models, temporal availability, and time standards.
+- [Geospatial Coordinate Reference](docs/geo_reference.md) — Coordinate notation systems (DD, DDM, DMS), string parsing, and `GeoCoordinate` usage.
+- [DataFrame Date Utilities Reference](docs/utils_reference.md) — Date column matching, DatetimeIndex fallbacks, and timezone handling.
+- [API Reference](docs/api_reference.md) — Complete Python API reference for `PowerClient`, `GeoCoordinate`, and query functions.
+- [Configuration Reference](docs/config_reference.md) — Environment variables, JSON configuration assets, and SQLite cache settings.
+- [Developer Guide](docs/developer_guide.md) — Internal request lifecycles, cache key design, and architecture details.
+- [Contributing & Testing](docs/contributing.md) — Guidelines for contributing, running `pytest`, and checking typing with `mypy`.
 
 ---
 
@@ -92,7 +98,7 @@ df = client.get_point_data(
 )
 print(df.head())
 
-# 2. Sample 1D spatial transect (clamping respects native parameter grid spacing)
+# 2. Sample along a 1D spatial transect (respecting native parameter grid spacing)
 coord_a = GeoCoordinate.from_decimal(-25.0, -48.0)
 coord_b = GeoCoordinate.from_decimal(-20.0, -48.0)
 
@@ -112,12 +118,12 @@ print(df_transect.head())
 ## Command Line Interface (CLI)
 
 ```bash
-# Fetch single point data to CSV
+# Fetch single-point data to CSV
 aidweather fetch --lat -23.55 --lon -46.63 \
     --start 2023-01-01 --end 2023-01-31 \
     --params T2M,PRECTOTCORR --output point_data.csv
 
-# Sample along a spatial transect
+# Sample along a 1D spatial transect
 aidweather fetch-transect \
     --lat-start -25.0 --lon-start -48.0 \
     --lat-end   -20.0 --lon-end   -48.0 \
@@ -140,7 +146,7 @@ aidweather cache info
 
 ## Data Licensing & Official NASA Attribution
 
-NASA POWER data are open access and free of charge. In accordance with [NASA Earthdata Data Use and Attribution Policy](https://www.earthdata.nasa.gov/learn/use-nasa-data), scientific publications, reports, and applications utilizing `aidweather` must properly cite the NASA POWER Project and acknowledge the primary satellite/reanalysis source products.
+NASA POWER data are open access and free of charge. In accordance with the [NASA Earthdata Data Use and Attribution Policy](https://www.earthdata.nasa.gov/learn/use-nasa-data), scientific publications, reports, and applications utilizing `aidweather` must properly cite the NASA POWER Project and acknowledge the primary satellite/reanalysis source products.
 
 **Suggested Acknowledgment Text:**
 > *"Meteorological and solar energy parameters were retrieved from the NASA Prediction Of Worldwide Energy Resources (POWER) project using aidweather v0.1.3. NASA POWER meteorological products originate from the GMAO MERRA-2 / GEOS-IT assimilation models, and solar radiation products originate from NASA LaRC CERES / FLASHFlux / SRB satellite observations."*
@@ -150,4 +156,3 @@ NASA POWER data are open access and free of charge. In accordance with [NASA Ear
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
-
