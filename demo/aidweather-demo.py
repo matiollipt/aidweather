@@ -277,8 +277,6 @@ print("Rows returned :", len(df_ext))
 # automatically and an `INFO` message is logged.
 
 # %%
-from aidweather import GeoCoordinate
-
 coord_a = GeoCoordinate.from_decimal(-25.0, -51.16)  # southern end
 coord_b = GeoCoordinate.from_decimal(-20.0, -51.16)  # northern end (~555 km)
 
@@ -418,7 +416,7 @@ log_path = Path(log_cfg.get("filename"))
 if log_path.exists():
     print(f"Log file created/updated at: {log_path}")
     print("\nLast 3 lines of the log file:")
-    with open(log_path, "r") as f:
+    with open(log_path) as f:
         lines = f.readlines()
         for line in lines[-3:]:
             print("  " + line.strip())

@@ -25,6 +25,11 @@ Before submitting code changes, run the full suite of automated quality checks:
 uv run --with-editable . --extra test pytest -q
 ```
 
+### Code Linting & Formatting with ruff
+```bash
+uv run ruff check .
+```
+
 ### Static Type Checking with mypy
 ```bash
 uv run mypy src/aidweather

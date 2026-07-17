@@ -2,7 +2,6 @@
 """Tests for environment variable overrides (AIDWEATHER_CACHE_DIR, AIDWEATHER_LOG_DIR, etc.)."""
 
 import logging
-from pathlib import Path
 
 from typer.testing import CliRunner
 
