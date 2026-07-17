@@ -298,9 +298,7 @@ def _filter_df_by_date(
     """Return *df* filtered to the inclusive date range [*start*, *end*]."""
     if df.empty:
         return df
-    res = df.loc[start:end]
-    res.attrs = df.attrs.copy()
-    return res
+    return df.loc[start:end]
 
 
 # --- Parsing Helpers ---
@@ -370,9 +368,7 @@ def _ensure_all_params_in_df(df: pd.DataFrame, params: list[str]) -> pd.DataFram
     for param in params:
         if param not in df.columns:
             df[param] = pd.NA
-    res = df[params]
-    res.attrs = df.attrs.copy()
-    return res
+    return df[params]
 
 
 def _regional_response_to_dataframe(data: dict[str, Any]) -> pd.DataFrame:
@@ -806,12 +802,6 @@ class PowerClient:
             self._metrics["api_calls"] += 1
             self._metrics["total_downloaded_bytes"] += b
             self._metrics["fetch_duration"] = time.perf_counter() - start_time
-            req_params = base_payload.get("parameters", "").split(",")
-            df.attrs["spatial_provenance"] = {
-                "temporal_api": self.temporal_api,
-                "requested_params": [p for p in req_params if p],
-                "parameters_metadata": {p: cfg.param_metadata(p) for p in req_params if p},
-            }
             return df
 
         cache_key = _make_cache_key(base_payload, self.temporal_api)
@@ -877,24 +867,10 @@ class PowerClient:
             params = base_payload.get("parameters", "").split(",")
             # Create a DataFrame with the correct index and columns, filled with NaNs
             if not params or not params[0]:
-                empty_res = pd.DataFrame(index=date_range)
-            else:
-                empty_res = pd.DataFrame(np.nan, index=date_range, columns=params)
-            empty_res.attrs["spatial_provenance"] = {
-                "temporal_api": self.temporal_api,
-                "requested_params": [p for p in params if p],
-                "parameters_metadata": {p: cfg.param_metadata(p) for p in params if p},
-            }
-            return empty_res
+                return pd.DataFrame(index=date_range)
+            return pd.DataFrame(np.nan, index=date_range, columns=params)
 
-        res_df = _filter_df_by_date(combined_df, req_start, req_end)
-        req_params = base_payload.get("parameters", "").split(",")
-        res_df.attrs["spatial_provenance"] = {
-            "temporal_api": self.temporal_api,
-            "requested_params": [p for p in req_params if p],
-            "parameters_metadata": {p: cfg.param_metadata(p) for p in req_params if p},
-        }
-        return res_df
+        return _filter_df_by_date(combined_df, req_start, req_end)
 
     def get_point_data(
         self,

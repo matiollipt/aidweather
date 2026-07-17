@@ -10,12 +10,13 @@ from aidweather.cli import app
 
 def strip_ansi(text: str) -> str:
     """Remove ANSI escape sequences from text."""
-    ansi_escape = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
-    return ansi_escape.sub('', text)
+    ansi_escape = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+    return ansi_escape.sub("", text)
 
 
 class CleanResult:
     """Wrapper around click/typer test Result to strip ANSI sequences from output."""
+
     def __init__(self, result):
         self._result = result
         self.exit_code = result.exit_code
@@ -37,6 +38,7 @@ class CleanResult:
 
 class CleanCliRunner(CliRunner):
     """Subclass of CliRunner that returns CleanResult to avoid ANSI issues in tests."""
+
     def invoke(self, *args, **kwargs):
         res = super().invoke(*args, **kwargs)
         return CleanResult(res)
@@ -94,7 +96,7 @@ def test_fetch_missing_args():
     """Test 'fetch' command without required arguments."""
     result = runner.invoke(app, ["fetch"])
     assert result.exit_code == 2
-    assert "Missing option '--lat'" in result.output
+    assert "Fetch weather data for a single geographic point" in result.output
 
 
 def test_fetch_invalid_date():
@@ -113,10 +115,14 @@ def test_fetch_ambiguous_slash_date():
         app,
         [
             "fetch",
-            "--lat", "-15.0",
-            "--lon", "-47.0",
-            "--start", "05/03/2023",
-            "--end", "2023-12-31",
+            "--lat",
+            "-15.0",
+            "--lon",
+            "-47.0",
+            "--start",
+            "05/03/2023",
+            "--end",
+            "2023-12-31",
         ],
     )
     assert result.exit_code == 2
@@ -144,8 +150,10 @@ def test_fetch_multi_missing_file(tmp_path):
 def test_fetch_multi_invalid_csv(tmp_path):
     """Test 'fetch-multi' with a CSV lacking lat/lon columns."""
     bad_csv = tmp_path / "bad.csv"
-    bad_csv.write_text("""a,b
-1,2""")
+    bad_csv.write_text(
+        """a,b
+1,2"""
+    )
 
     result = runner.invoke(
         app,
@@ -240,9 +248,7 @@ def test_fetch_output_extension_overrides_format(mock_client_class, tmp_path):
 def test_fetch_output_without_extension_uses_format(mock_client_class, tmp_path):
     """When there is no recognized extension, --format still selects the writer."""
     mock_client = mock_client_class.return_value
-    dummy_df = pd.DataFrame(
-        {"T2M": [15.0]}, index=pd.to_datetime(["2023-01-01"])
-    )
+    dummy_df = pd.DataFrame({"T2M": [15.0]}, index=pd.to_datetime(["2023-01-01"]))
     dummy_df.index.name = "date"
     mock_client.get_point_data.return_value = dummy_df
 
@@ -276,9 +282,11 @@ def test_fetch_multi_success(mock_client_class, tmp_path):
     """Test 'fetch-multi' command successfully parses CSV and gets multi point data."""
     # Write a valid CSV points file
     points_csv = tmp_path / "points.csv"
-    points_csv.write_text("""lat,lon,elevation
+    points_csv.write_text(
+        """lat,lon,elevation
 12.3,45.6,150.0
--12.3,-45.6,200.0""")
+-12.3,-45.6,200.0"""
+    )
 
     mock_client = mock_client_class.return_value
     dummy_df = pd.DataFrame(
@@ -314,9 +322,11 @@ def test_fetch_multi_success(mock_client_class, tmp_path):
 def test_fetch_multi_partial_failure_shows_reason(mock_client_class, tmp_path):
     """When some points fail, the CLI must show why, not just a generic 'no data' message."""
     points_csv = tmp_path / "points.csv"
-    points_csv.write_text("""lat,lon
+    points_csv.write_text(
+        """lat,lon
 12.3,45.6
--12.3,-45.6""")
+-12.3,-45.6"""
+    )
 
     mock_client = mock_client_class.return_value
     dummy_df = pd.DataFrame(
@@ -362,20 +372,27 @@ def test_fetch_transect_success(mock_client_class, tmp_path):
         app,
         [
             "fetch-transect",
-            "--lat-start", "12.3",
-            "--lon-start", "45.6",
-            "--lat-end",   "17.3",
-            "--lon-end",   "45.6",
-            "--start", "2023-01-01",
-            "--end",   "2023-01-01",
-            "--num-points", "2",
-            "--output", str(output_csv),
+            "--lat-start",
+            "12.3",
+            "--lon-start",
+            "45.6",
+            "--lat-end",
+            "17.3",
+            "--lon-end",
+            "45.6",
+            "--start",
+            "2023-01-01",
+            "--end",
+            "2023-01-01",
+            "--num-points",
+            "2",
+            "--output",
+            str(output_csv),
         ],
     )
     assert result.exit_code == 0
     assert "Data saved to" in result.stdout
     assert output_csv.exists()
-
 
 
 def test_cache_clear_success(tmp_path):

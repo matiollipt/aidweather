@@ -48,21 +48,6 @@ df = client.get_point_data_from_coordinate(
     start="2023-01-01",
     end="2023-01-31",
     params=["T2M", "T2M_MAX", "T2M_MIN", "PRECTOTCORR"],
-)
-```
-
-### Inspected Spatial Provenance
-Every returned DataFrame contains parameter grid metadata in `df.attrs["spatial_provenance"]`:
-
-```python
-print(df.attrs["spatial_provenance"])
-# {
-#   'temporal_api': 'daily',
-#   'requested_params': ['T2M', 'PRECTOTCORR'],
-#   'parameters_metadata': {
-#       'T2M': {'native_grid': {'latitude_degrees': 0.5, 'longitude_degrees': 0.625}, ...}
-#   }
-# }
 ```
 
 ---

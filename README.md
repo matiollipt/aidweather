@@ -89,8 +89,6 @@ df = client.get_point_data(
     params=["T2M", "ALLSKY_SFC_SW_DWN", "PRECTOTCORR"],
 )
 print(df.head())
-# Access attached parameter metadata & provenance
-print(df.attrs["spatial_provenance"])
 
 # 2. Sample 1D spatial transect (clamping respects native parameter grid spacing)
 coord_a = GeoCoordinate.from_decimal(-25.0, -48.0)

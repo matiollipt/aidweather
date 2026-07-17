@@ -18,7 +18,7 @@ User API Request / CLI Invocation
   ├──► Network Execution (_fetch_and_parse_ranges via requests Session with retries)
   ├──► Response Serialization & NaN Normalization (-999 -> pd.NA)
   ├──► Merge & Cache Update (_merge_and_deduplicate -> SQLite Write)
-  └──► Return DataFrame + Attach Spatial Provenance (df.attrs["spatial_provenance"])
+  └──► Return DataFrame
 ```
 
 ---
@@ -47,4 +47,3 @@ Contributors must maintain the following non-negotiable data invariants:
 1. **Never Impute Missing Data**: Missing values from NASA POWER (fill code `-999`) must be converted strictly to explicit pandas missing values (`pd.NA` / `np.nan`). Never apply forward-filling (`ffill`), backward-filling (`bfill`), or linear interpolation.
 2. **Preserve Original Units**: Do not apply silent unit conversions. Units returned by NASA POWER must be preserved and disclosed in parameter metadata.
 3. **Preserve Coordinate Precision**: Coordinates must retain at least 4 decimal places precision.
-4. **Preserve DataFrame Attributes**: Slicing or column selection helpers (`_filter_df_by_date`, `_ensure_all_params_in_df`) must preserve `df.attrs["spatial_provenance"]`.

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """
-Command Line Interface for the AidWeather Power Client.
+Command Line Interface for AidWeather.
 
 Exposes the following subcommand groups via the ``app`` Typer application:
 
@@ -34,8 +34,11 @@ app = typer.Typer(
     help="AidWeather CLI for fetching and analyzing agroclimatic data from NASA POWER.",
     no_args_is_help=True,
 )
-params_app = typer.Typer(help="Manage NASA POWER parameter catalogues.")
-cache_app = typer.Typer(help="Manage the local SQLite cache.")
+params_app = typer.Typer(
+    help="Manage NASA POWER parameter catalogues.",
+    no_args_is_help=True,
+)
+cache_app = typer.Typer(help="Manage the local SQLite cache.", no_args_is_help=True)
 
 app.add_typer(params_app, name="params")
 app.add_typer(cache_app, name="cache")
@@ -198,7 +201,7 @@ def _save_output(df: pd.DataFrame, output: Path | None, fmt: str | None) -> None
         raise typer.Exit(code=1) from exc
 
 
-@app.command()
+@app.command(no_args_is_help=True)
 def fetch(  # noqa: PLR0913
     lat: Annotated[
         float, typer.Option("--lat", help="Latitude of the point of interest.")
@@ -291,7 +294,7 @@ def fetch(  # noqa: PLR0913
     _save_output(df, output, fmt)
 
 
-@app.command(name="fetch-multi")
+@app.command(name="fetch-multi", no_args_is_help=True)
 def fetch_multi(  # noqa: PLR0913
     points_file: Annotated[
         Path,
@@ -392,7 +395,7 @@ def fetch_multi(  # noqa: PLR0913
     _save_output(df, output, fmt)
 
 
-@app.command(name="fetch-transect")
+@app.command(name="fetch-transect", no_args_is_help=True)
 def fetch_transect(  # noqa: PLR0913
     lat_start: Annotated[
         float, typer.Option("--lat-start", help="Latitude of the transect start point.")
@@ -519,7 +522,7 @@ def fetch_transect(  # noqa: PLR0913
     _save_output(df, output, fmt)
 
 
-@app.command(name="fetch-regional")
+@app.command(name="fetch-regional", no_args_is_help=True)
 def fetch_regional(  # noqa: PLR0913
     lat_min: Annotated[
         float,
@@ -650,7 +653,7 @@ def params_list(
     console.print(table)
 
 
-@params_app.command("describe")
+@params_app.command("describe", no_args_is_help=True)
 def params_describe(
     code: Annotated[
         str, typer.Argument(help="Parameter code to describe (e.g., T2M).")

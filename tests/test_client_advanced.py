@@ -343,28 +343,6 @@ def test_regional_request_failure_logging(mock_session):
         assert failed_log_found, "Could not find payload representation log message"
 
 
-def test_spatial_provenance_attrs(mock_session):
-    """Verify returned DataFrames contain parameter metadata and spatial provenance in df.attrs."""
-    mock_session.get(
-        "https://power.larc.nasa.gov/api/temporal/daily/point",
-        json=SAMPLE_POINT_RESPONSE,
-    )
-    client = PowerClient()
-    client.cache_cfg["enabled"] = False
-
-    df = client.get_point_data_from_coordinate(
-        coord=GeoCoordinate(lat=10.0, lon=20.0),
-        start="2023-01-01",
-        end="2023-01-02",
-        params=["T2M", "ALLSKY_SFC_SW_DWN"],
-    )
-
-    assert "spatial_provenance" in df.attrs
-    prov = df.attrs["spatial_provenance"]
-    assert prov["requested_params"] == ["T2M", "ALLSKY_SFC_SW_DWN"]
-    assert "T2M" in prov["parameters_metadata"]
-    assert "ALLSKY_SFC_SW_DWN" in prov["parameters_metadata"]
-
 
 def test_parameter_specific_transect_clamping():
     """Verify sub-grid transect clamping uses requested parameter native grid resolution."""

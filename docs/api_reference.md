@@ -43,7 +43,7 @@ def get_point_data_from_coordinate(
     wind_surface: float | None = None,
 ) -> pd.DataFrame:
 ```
-Fetches single-point data using a `GeoCoordinate` instance. Returns a DataFrame indexed by `date` with `df.attrs["spatial_provenance"]` populated.
+Fetches single-point data using a `GeoCoordinate` instance. Returns a DataFrame indexed by `date`.
 
 #### `get_multi_point_data`
 ```python
