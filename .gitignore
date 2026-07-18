@@ -24,6 +24,7 @@ __pycache__/
 *.swp
 *~
 *.log
+dev-notes/
 
 # Distribution & Build folders
 develop-eggs/
@@ -46,12 +47,5 @@ venv/
 env/
 ENV/
 
-# Miscelaneous
-examples
-examples/external_validation/
-examples/external_validation/data/
-examples/external_validation/plots/
-examples/external_validation/outputs/
-/scripts/
-!/scripts/beta_gate.sh
-outputs/
+# Future releases add-ons
+examples/
