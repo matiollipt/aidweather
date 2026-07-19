@@ -49,3 +49,6 @@ ENV/
 
 # Future releases add-ons
 examples/
+
+# Results and Outputs from tests
+outputs/
