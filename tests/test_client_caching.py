@@ -152,6 +152,88 @@ def test_hourly_caching_logic(mock_cache_config):
         pd.testing.assert_frame_equal(df1, df2)
 
 
+def test_cache_roundtrip_preserves_missing_values(mock_cache_config):
+    """A cached response with a NASA POWER -999 fill value must decode to the
+    same NaN pattern and dtype as the original live fetch, for both daily and
+    hourly resolutions. Guards against the -999<->NA round-trip silently
+    breaking in `_convert_df_to_cacheable_json` / `_response_to_dataframe`."""
+    daily_response = {
+        "properties": {"parameter": {"T2M": {"20230101": 10.5, "20230102": -999}}}
+    }
+    # NASA POWER's real hourly endpoint always returns all 24 hourly keys for
+    # a requested day (using -999 for any missing hour, never omitting keys),
+    # and aidweather's cache-coverage check relies on that invariant. Mock a
+    # full day here rather than a truncated one to match real API behavior.
+    hourly_response = {
+        "properties": {
+            "parameter": {
+                "T2M": {
+                    f"202301010{h}" if h < 10 else f"20230101{h}": (
+                        -999 if h == 1 else 8.0 + h * 0.5
+                    )
+                    for h in range(24)
+                }
+            }
+        }
+    }
+
+    for temporal_api, api_response, start, end in (
+        ("daily", daily_response, "20230101", "20230102"),
+        ("hourly", hourly_response, "2023-01-01 00:00", "2023-01-01 01:00"),
+    ):
+        with requests_mock.Mocker() as m:
+            m.get(requests_mock.ANY, json=api_response)
+            client = PowerClient(temporal_api=temporal_api)
+
+            live_df = client.get_point_data(
+                lat=1.0, lon=2.0, start=start, end=end, params=["T2M"]
+            )
+            assert m.call_count == 1
+
+            cached_df = client.get_point_data(
+                lat=1.0, lon=2.0, start=start, end=end, params=["T2M"]
+            )
+            assert m.call_count == 1, "second call must be served from cache"
+
+        # The -999 fill value must decode to NaN identically on both paths.
+        assert live_df["T2M"].isna().tolist() == [False, True]
+        pd.testing.assert_frame_equal(live_df, cached_df)
+
+
+def test_daily_and_hourly_cache_keys_do_not_collide(mock_cache_config):
+    """Daily and hourly requests for the identical lat/lon/params must be
+    cached under different keys, since _make_cache_key folds temporal_api
+    into the hash. A regression here would silently serve one resolution's
+    data for the other."""
+    daily_response = {"properties": {"parameter": {"T2M": {"20230101": 10.0}}}}
+    hourly_response = {"properties": {"parameter": {"T2M": {"2023010100": 99.0}}}}
+
+    daily_client = PowerClient(temporal_api="daily")
+    hourly_client = PowerClient(temporal_api="hourly")
+
+    with requests_mock.Mocker() as m:
+        m.get(requests_mock.ANY, json=daily_response)
+        daily_df = daily_client.get_point_data(
+            lat=1.0, lon=2.0, start="20230101", end="20230101", params=["T2M"]
+        )
+        assert m.call_count == 1
+
+    with requests_mock.Mocker() as m:
+        m.get(requests_mock.ANY, json=hourly_response)
+        hourly_df = hourly_client.get_point_data(
+            lat=1.0,
+            lon=2.0,
+            start="2023-01-01 00:00",
+            end="2023-01-01 00:00",
+            params=["T2M"],
+        )
+        # A cache-key collision would serve the daily entry and skip this call.
+        assert m.call_count == 1, "hourly request must not hit the daily cache entry"
+
+    assert daily_df["T2M"].iloc[0] == 10.0
+    assert hourly_df["T2M"].iloc[0] == 99.0
+
+
 def test_concurrent_cache_writes(mock_cache_config):
     """Verifies that concurrent threads writing to the database do not cause lock failures."""
     import threading

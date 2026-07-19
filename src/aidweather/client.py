@@ -279,6 +279,26 @@ def _get_date_ranges_to_fetch(
     DataFrame and returns a list of ``(start, end)`` tuples representing the
     gaps that still need to be fetched from the API.
 
+    "Look and understand" coverage strategy — read this before touching cache
+    logic: coverage is inferred purely from the timestamps *present* in
+    *cached_df*, not from any separately stored record of what date range was
+    actually requested. This relies on an invariant of the NASA POWER API: a
+    response for a given day/hour always includes a key for every day/hour in
+    that span (using the ``-999`` fill code for missing values), never
+    omitting a key outright. Under that invariant, "furthest timestamp we've
+    seen" and "furthest date NASA has confirmed data for" are the same thing,
+    so no separate coverage bookkeeping is needed.
+
+    Consequence if that invariant is ever violated (e.g. a response that
+    truncates rather than fill-codes a gap — see the provisional-data-tail
+    caveat in ``docs/parameter_provenance.md``): this function will keep
+    reporting the trailing dates as "not yet covered" on every call, so a
+    request touching that range re-fetches from the API every time instead of
+    being served from cache. This is intentional, not a bug — it self-heals
+    once NASA backfills the gap — but it does mean the cache gives no
+    "call once and never again" guarantee for very recent/provisional dates.
+    See ``docs/technical_debt.md`` for the fuller write-up of this trade-off.
+
     Args:
         requested_start: Inclusive start of the requested date range.
         requested_end: Inclusive end of the requested date range.

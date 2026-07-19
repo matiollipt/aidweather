@@ -11,7 +11,7 @@ This document describes configuration loading, environment variables, SQLite cac
 | Variable | Description | Default Path |
 | :--- | :--- | :--- |
 | `AIDWEATHER_CACHE_DIR` | Custom directory path for the local SQLite cache database. | Platform XDG cache (`~/.cache/aidweather`) |
-| `AIDWEATHER_LOG_DIR` | Custom directory path for `aidweather.log` file outputs. | Platform XDG log dir (`~/.cache/aidweather`) |
+| `AIDWEATHER_LOG_DIR` | Custom directory path for `aidweather.log` file outputs. | Platform XDG log dir (e.g. `~/.local/state/aidweather/log` on Linux) |
 | `AIDWEATHER_RUN_LIVE_TESTS` | Set to `1` to allow live NASA POWER API test suite execution. | Unset (`0`) |
 
 ---
@@ -21,7 +21,12 @@ This document describes configuration loading, environment variables, SQLite cac
 Location: `<AIDWEATHER_CACHE_DIR>/aidweather_cache.db`
 
 ### Table: `cache`
-- `key` (`TEXT PRIMARY KEY`): SHA-256 hash digest prefixed with `v1_`, generated from payload parameters (`temporal_api`, `parameters`, `latitude`, `longitude`, `elevation`, `wind-elevation`, `wind-surface`, `community`, `time-standard`).
+- `key` (`TEXT PRIMARY KEY`): SHA-256 hash digest prefixed with `v1_`, generated from the request
+  payload with `start`/`end` stripped out (`parameters`, `community`, `format`, `latitude`,
+  `longitude`, and, when supplied, `site-elevation`, `wind-elevation`, `wind-surface`), plus the
+  `temporal_api` value (`"daily"`/`"hourly"`) folded in so the two resolutions never share a key.
+  There is no `time-standard` field — `aidweather` does not currently send that NASA POWER query
+  parameter at all (see `docs/technical_debt.md` item 2).
 - `data` (`BLOB`): Gzip-compressed JSON payload containing fetched time-series records.
 - `timestamp` (`DATETIME`): Access timestamp of the cached record.
 

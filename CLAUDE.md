@@ -55,16 +55,26 @@ importable. Resolution precedence for cache/log paths: env var (`AIDWEATHER_CACH
 - *Caching*: SQLite at `<cache_dir>/aidweather_cache.db`, opened `check_same_thread=False` with
   a busy timeout, guarded by an in-process `threading.Lock`. Safe for the thread pool used by
   multi-point/transect fetches, but not for multiple *processes* sharing one DB file beyond
-  SQLite's own file locking. Cache key is a SHA-256 hash of the request payload with
-  `start`/`end` stripped out — so one row covers a location+params+temporal_api regardless of
-  date range. `_get_date_ranges_to_fetch` diffs the requested span against the cached span and
-  only fetches the missing edges, then merges and re-caches. If a live fetch raises `OSError`
-  but stale cached data exists, the stale data is served instead of raising.
+  SQLite's own file locking. Cached blobs are gzip-compressed JSON. Cache key is a `"v1_"`-prefixed
+  SHA-256 hash of the request payload with `start`/`end` stripped out — so one row covers a
+  location+params+temporal_api regardless of date range (bump to `"v2_"` if the cache schema ever
+  changes, per `docs/technical_debt.md`). `_get_date_ranges_to_fetch` diffs the requested span
+  against the cached span and only fetches the missing edges, then merges and re-caches. Coverage
+  is inferred purely from timestamps present in the cached data ("look and understand" strategy,
+  documented in the function's own docstring and `docs/technical_debt.md` item 4) — it relies on
+  NASA always returning a key per day/hour (never omitting one), so a genuinely truncated trailing
+  response would keep re-fetching that edge on every call rather than caching it, by design. If a
+  live fetch raises `OSError` but stale cached data exists, the stale data is served instead of raising
+  — *except* for HTTP 400/422 (client-side validation errors), which are always re-raised even when
+  stale data is available, since retrying or serving stale data for a malformed request would mask
+  the bug.
 - *Endpoints*: `get_point_data`/`get_point_data_from_coordinate` (single location, up to 20
   daily / 15 hourly params, uses the cache path above); `get_multi_point_data` and
   `get_transect_data` fan out point calls across a `ThreadPoolExecutor` (transect points via
-  `np.linspace`, with spacing clamped to a minimum of 0.5°/~55km to match POWER's native grid —
-  silently reduces point count with an INFO log rather than erroring); `get_regional_data`
+  `np.linspace`, with spacing clamped to the requested parameters' native grid resolution — 0.5°
+  (~55km) for MERRA-2-sourced params, 1.0° (~111km) for CERES-sourced params like
+  `ALLSKY_SFC_SW_DWN`, taking the finest among requested params as the floor — silently reduces
+  point count with an INFO log rather than erroring); `get_regional_data`
   (bounding-box GeoJSON, hard-capped to 1 parameter and a 4.5°×4.5° box, validated pre-request
   with `ValueError` — does not use the point cache/date-diff mechanism, parses a different
   response shape).
@@ -132,7 +142,8 @@ patterns.
   `geo.py`'s equivalent) — add banners once a file grows multiple logical sections, don't force
   them on small files.
 - **Errors**: custom exceptions subclass a builtin and end in `Error`
-  (`AmbiguousDateError(ValueError)`); validation raises plain `ValueError` with an f-string naming
+  (`AmbiguousDateError(ValueError)`, `APIRequestError(OSError)`); validation raises plain
+  `ValueError` with an f-string naming
   the offending value and constraint; network failures are normalized to
   `OSError(f"...: {e}") from e` so callers only need to catch one type; CLI commands uniformly
   wrap client calls in `try/except Exception as e: console.print(...); raise
