@@ -17,7 +17,7 @@ def mock_cache_config(tmp_path, monkeypatch):
     """
 
     def mock_return():
-        return {"enabled": True, "path": str(tmp_path), "ttl_seconds": 3600}
+        return {"enabled": True, "path": str(tmp_path)}
 
     monkeypatch.setattr(cfg, "cache_config", mock_return)
     return tmp_path

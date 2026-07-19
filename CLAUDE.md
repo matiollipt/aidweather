@@ -77,7 +77,8 @@ importable. Resolution precedence for cache/log paths: env var (`AIDWEATHER_CACH
   point count with an INFO log rather than erroring); `get_regional_data`
   (bounding-box GeoJSON, hard-capped to 1 parameter and a 4.5°×4.5° box, validated pre-request
   with `ValueError` — does not use the point cache/date-diff mechanism, parses a different
-  response shape).
+  response shape; rejects `temporal_api="hourly"` outright since NASA POWER's regional endpoint
+  is daily-only, which is why the CLI's `fetch-regional` command hardcodes `temporal_api="daily"`).
 - *Data conventions*: fill value `-999` is converted to `pd.NA` everywhere. NASA POWER
   timestamps are Local Solar Time (LST), not civil time. `parse_date_strict` deliberately rejects
   ambiguous slash dates (e.g. `"05/03/2023"`, raises `AmbiguousDateError`) since NASA/pandas
