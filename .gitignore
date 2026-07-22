@@ -47,7 +47,8 @@ venv/
 env/
 ENV/
 
-# Future releases add-ons
+# Development helper folders
+dev-notes/
 examples/
 
 # Results and Outputs from tests
