@@ -24,7 +24,10 @@
             "WS10M": "Wind Speed at 10 m (m/s)",
             "WS10M_MAX": "Maximum Wind Speed at 10 m (m/s)",
             "WD10M": "Wind Direction at 10 m (degrees)",
-            "PS": "Surface Pressure (kPa)"
+            "PS": "Surface Pressure (kPa)",
+            "GWETTOP": "Surface Soil Wetness (0-1)",
+            "GWETROOT": "Root Zone Soil Wetness (0-1)",
+            "GWETPROF": "Profile Soil Moisture (0-1)"
         },
         "default": {
             "T2M": "Temperature at 2 m (°C)",
@@ -51,7 +54,10 @@
         "WS10M": "Average Wind Speed at 10 m (m/s): Modeled daily average horizontal movement of air. Data is obtained from the NASA MERRA-2 model (1981-Present). Wind is a crucial factor in the Evapotranspiration (ET) calculation and can cause mechanical stress. Used in predictive models for water loss and general crop stress.",
         "WS10M_MAX": "Maximum Wind Speed at 10 m (m/s): Modeled maximum instantaneous wind speed. Data is obtained from the NASA MERRA-2 model (1981-Present). Essential for assessing potential structural damage to crops (lodging of cereals/maize) or infrastructure (greenhouses). Used as a threshold trigger for high-risk warnings in decision-support systems.",
         "WD10M": "Average Wind Direction at 10 m (degrees): Modeled daily average direction from which the wind is blowing. Data is obtained from the NASA MERRA-2 model (1981-Present). Primarily used for modeling the drift/dispersion of airborne inputs (pesticides, herbicides, spores) and for local climate pattern analysis (e.g., windbreak planning).",
-        "PS": "Surface Pressure (kPa): The atmospheric pressure at the earth's surface, adjusted for local elevation. Data is obtained from the NASA MERRA-2 model (1981-Present). PS is a necessary input for the Penman-Monteith Evapotranspiration equation to accurately account for air density, making it fundamental for precise water management."
+        "PS": "Surface Pressure (kPa): The atmospheric pressure at the earth's surface, adjusted for local elevation. Data is obtained from the NASA MERRA-2 model (1981-Present). PS is a necessary input for the Penman-Monteith Evapotranspiration equation to accurately account for air density, making it fundamental for precise water management.",
+        "GWETTOP": "Surface Soil Wetness (0-1): Fraction of saturation in the top soil layer (~0-5 cm), as modeled by the NASA GMAO MERRA-2/GEOS-IT land-surface model (1981-Present, ~0.5°x0.625° resolution). Available on the NASA POWER daily endpoint only — no hourly variant is published. Used for irrigation timing, seedling emergence risk assessment, and topsoil-driven disease modeling (e.g. damping-off).",
+        "GWETROOT": "Root Zone Soil Wetness (0-1): Fraction of saturation across the root zone soil layer, as modeled by the NASA GMAO MERRA-2/GEOS-IT land-surface model (1981-Present, ~0.5°x0.625° resolution). Available on the NASA POWER daily endpoint only — no hourly variant is published. A key input for irrigation scheduling and water-stress modeling in established crops.",
+        "GWETPROF": "Profile Soil Moisture (0-1): Fraction of saturation across the full soil column/profile, as modeled by the NASA GMAO MERRA-2/GEOS-IT land-surface model (1981-Present, ~0.5°x0.625° resolution). Available on the NASA POWER daily endpoint only — no hourly variant is published. Used in drought monitoring and long-term water-balance modeling."
     },
     "param_metadata": {
         "T2M": {
@@ -216,6 +222,39 @@
             "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
             "availability": {"daily_start": "1981-01-01", "hourly_start": "2001-01-01"},
             "time_standards": ["LST", "UTC"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / GMAO MERRA-2"
+        },
+        "GWETTOP": {
+            "short_name": "Surface Soil Wetness",
+            "description": "Surface Soil Wetness (top layer, 0-1 fraction)",
+            "units": {"daily": "0-1", "hourly": null},
+            "source_family": "MERRA-2/GEOS-IT",
+            "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
+            "availability": {"daily_start": "1981-01-01", "hourly_start": null},
+            "time_standards": ["LST"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / GMAO MERRA-2"
+        },
+        "GWETROOT": {
+            "short_name": "Root Zone Soil Wetness",
+            "description": "Root Zone Soil Wetness (0-1 fraction)",
+            "units": {"daily": "0-1", "hourly": null},
+            "source_family": "MERRA-2/GEOS-IT",
+            "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
+            "availability": {"daily_start": "1981-01-01", "hourly_start": null},
+            "time_standards": ["LST"],
+            "provisional_tail": true,
+            "attribution": "NASA POWER / GMAO MERRA-2"
+        },
+        "GWETPROF": {
+            "short_name": "Profile Soil Moisture",
+            "description": "Profile Soil Moisture (full column, 0-1 fraction)",
+            "units": {"daily": "0-1", "hourly": null},
+            "source_family": "MERRA-2/GEOS-IT",
+            "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
+            "availability": {"daily_start": "1981-01-01", "hourly_start": null},
+            "time_standards": ["LST"],
             "provisional_tail": true,
             "attribution": "NASA POWER / GMAO MERRA-2"
         }

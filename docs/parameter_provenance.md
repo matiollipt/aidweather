@@ -1,6 +1,6 @@
 # Parameter Provenance Guide — `aidweather`
 
-This document details the scientific lineage, units, temporal availability, and primary applications for all 15 core parameters supported by `aidweather`.
+This document details the scientific lineage, units, temporal availability, and primary applications for all 18 core parameters supported by `aidweather`.
 
 ---
 
@@ -69,6 +69,27 @@ This document details the scientific lineage, units, temporal availability, and 
 - **Daily Unit**: mm/day
 - **Hourly Unit**: mm/hr
 - **Application**: Crop water budget, drought indices, rainfall estimation.
+
+#### `GWETTOP` — Surface Soil Wetness
+- **Source Product**: MERRA-2 / GEOS-IT (land-surface model)
+- **Native Resolution**: 0.50° Lat × 0.625° Lon
+- **Temporal Coverage**: Daily only (1981-01-01 to Present). No hourly variant is published by NASA POWER; `aidweather` raises `ValueError` if requested via the hourly endpoint.
+- **Units**: 0–1 (fraction of saturation, top ~0-5 cm soil layer)
+- **Application**: Irrigation timing, seedling emergence risk, topsoil-driven disease modeling (e.g. damping-off).
+
+#### `GWETROOT` — Root Zone Soil Wetness
+- **Source Product**: MERRA-2 / GEOS-IT (land-surface model)
+- **Native Resolution**: 0.50° Lat × 0.625° Lon
+- **Temporal Coverage**: Daily only (1981-01-01 to Present). No hourly variant is published by NASA POWER; `aidweather` raises `ValueError` if requested via the hourly endpoint.
+- **Units**: 0–1 (fraction of saturation, root zone layer)
+- **Application**: Irrigation scheduling, water-stress modeling for established crops.
+
+#### `GWETPROF` — Profile Soil Moisture
+- **Source Product**: MERRA-2 / GEOS-IT (land-surface model)
+- **Native Resolution**: 0.50° Lat × 0.625° Lon
+- **Temporal Coverage**: Daily only (1981-01-01 to Present). No hourly variant is published by NASA POWER; `aidweather` raises `ValueError` if requested via the hourly endpoint.
+- **Units**: 0–1 (fraction of saturation, full soil column)
+- **Application**: Drought monitoring, long-term water-balance modeling.
 
 ---
 

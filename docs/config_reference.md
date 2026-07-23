@@ -69,3 +69,24 @@ aidweather cache clear --yes
   }
 }
 ```
+
+For daily-only parameters (e.g. `GWETTOP`, `GWETROOT`, `GWETPROF`), `units.hourly` and
+`availability.hourly_start` are `null`:
+
+```json
+"GWETTOP": {
+  "short_name": "Surface Soil Wetness",
+  "units": {"daily": "0-1", "hourly": null},
+  "source_family": "MERRA-2/GEOS-IT",
+  "native_grid": {"latitude_degrees": 0.5, "longitude_degrees": 0.625},
+  "availability": {"daily_start": "1981-01-01", "hourly_start": null},
+  "time_standards": ["LST"],
+  "provisional_tail": true,
+  "attribution": "NASA POWER / GMAO MERRA-2"
+}
+```
+
+`PowerClient._validate_inputs` treats `availability.hourly_start is None` as the authoritative
+signal for "daily-only" — `units.hourly` is set to `null` in lockstep purely for display and is
+not read by the validator. Requesting such a parameter with `temporal_api="hourly"` raises
+`ValueError` before any HTTP request is made.

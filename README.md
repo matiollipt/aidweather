@@ -26,7 +26,7 @@
 
 ## Supported NASA POWER Parameters
 
-`aidweather` includes built-in metadata, unit validation, and spatial grid specifications for 15 core weather and solar radiation parameters:
+`aidweather` includes built-in metadata, unit validation, and spatial grid specifications for 18 core weather, solar radiation, and soil moisture parameters:
 
 | Code | Parameter Name | Source Product | Native Grid (Lat × Lon) | Daily Unit | Hourly Unit |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -45,6 +45,11 @@
 | `WS10M_MAX` | Maximum Wind Speed at 10 m | MERRA-2 / GEOS-IT | 0.50° × 0.625° | m/s | m/s |
 | `WD10M` | Wind Direction at 10 m | MERRA-2 / GEOS-IT | 0.50° × 0.625° | degrees | degrees |
 | `PS` | Surface Pressure | MERRA-2 / GEOS-IT | 0.50° × 0.625° | kPa | kPa |
+| `GWETTOP` | Surface Soil Wetness | MERRA-2 / GEOS-IT | 0.50° × 0.625° | 0–1 | — |
+| `GWETROOT` | Root Zone Soil Wetness | MERRA-2 / GEOS-IT | 0.50° × 0.625° | 0–1 | — |
+| `GWETPROF` | Profile Soil Moisture | MERRA-2 / GEOS-IT | 0.50° × 0.625° | 0–1 | — |
+
+> `—` indicates the parameter is not published on NASA POWER's hourly endpoint; requesting it with `temporal_api="hourly"` raises `ValueError`.
 
 ---
 

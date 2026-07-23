@@ -299,3 +299,46 @@ def test_unknown_parameter_warning():
         # Assert no warnings were issued
         user_warnings = [w for w in record if issubclass(w.category, UserWarning)]
         assert len(user_warnings) == 0
+
+
+@pytest.mark.parametrize("daily_only_param", ["GWETTOP", "GWETROOT", "GWETPROF"])
+def test_hourly_rejects_daily_only_param(daily_only_param):
+    """Daily-only parameters must be rejected up front for the hourly endpoint."""
+    client = PowerClient(temporal_api="hourly")
+    with pytest.raises(ValueError, match=f"{daily_only_param}.*daily-only"):
+        client._validate_inputs([daily_only_param], "20230101", "20230101")
+
+
+@pytest.mark.parametrize("daily_only_param", ["GWETTOP", "GWETROOT", "GWETPROF"])
+def test_daily_accepts_daily_only_param(daily_only_param):
+    """The same parameters are accepted without complaint on the daily endpoint."""
+    client = PowerClient(temporal_api="daily")
+    client._validate_inputs([daily_only_param], "20230101", "20230101")
+
+
+def test_hourly_multi_point_rejects_daily_only_param():
+    """The daily-only guard must fire before any worker threads are spawned in
+    get_multi_point_data, not get silently swallowed into `failed_points`."""
+    client = PowerClient(temporal_api="hourly")
+    with pytest.raises(ValueError, match="GWETTOP.*daily-only"):
+        client.get_multi_point_data(
+            points=[{"lat": 0, "lon": 0}],
+            start="20230101",
+            end="20230101",
+            params=["GWETTOP"],
+        )
+
+
+def test_hourly_transect_rejects_daily_only_param():
+    """get_transect_data delegates to get_multi_point_data with _validate=False,
+    so its own up-front _validate_inputs call must be the one that raises."""
+    client = PowerClient(temporal_api="hourly")
+    with pytest.raises(ValueError, match="GWETTOP.*daily-only"):
+        client.get_transect_data_from_coordinates(
+            coord_a=GeoCoordinate.from_decimal(0, 0),
+            coord_b=GeoCoordinate.from_decimal(1, 1),
+            start="20230101",
+            end="20230101",
+            params=["GWETTOP"],
+            num_points=3,
+        )

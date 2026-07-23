@@ -202,3 +202,14 @@ def test_param_metadata_and_grid_resolution():
 
     # Unknown parameter fallback
     assert cfg.get_native_grid(community="UNKNOWN_PARAM") == (0.5, 0.625)
+
+
+@pytest.mark.parametrize("daily_only_param", ["GWETTOP", "GWETROOT", "GWETPROF"])
+def test_daily_only_param_metadata(daily_only_param):
+    """Daily-only parameters must expose hourly_start=None as the authoritative
+    availability signal, with units.hourly=None kept in lockstep for display."""
+    meta = cfg.param_metadata(params=daily_only_param)
+    assert meta["availability"]["hourly_start"] is None
+    assert meta["availability"]["daily_start"] == "1981-01-01"
+    assert meta["units"]["hourly"] is None
+    assert cfg.get_native_grid(community=daily_only_param) == (0.5, 0.625)

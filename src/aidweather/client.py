@@ -793,7 +793,9 @@ class PowerClient:
             end: End date in any form accepted by :func:`parse_date_strict`.
 
         Raises:
-            ValueError: If *start* is later than *end*.
+            ValueError: If *start* is later than *end*, or if any code in
+                *params* is only available on the daily endpoint while this
+                client's ``temporal_api`` is ``"hourly"``.
             AmbiguousDateError: If either date is a slash-separated string.
 
         Warns:
@@ -809,6 +811,22 @@ class PowerClient:
                 UserWarning,
                 stacklevel=3,
             )
+
+        # Reject daily-only parameters when the active endpoint is hourly. The
+        # authoritative signal is availability.hourly_start being unset; units.hourly
+        # is set to null in lockstep purely for display and must not be relied on here.
+        if self.temporal_api == "hourly":
+            daily_only = [
+                p
+                for p in params
+                if p in known_params
+                and cfg.param_metadata(p).get("availability", {}).get("hourly_start") is None
+            ]
+            if daily_only:
+                raise ValueError(
+                    f"Parameter(s) {', '.join(daily_only)} are not available on the NASA "
+                    f"POWER hourly endpoint (daily-only). Use temporal_api='daily' instead."
+                )
 
         # Validate date range
         start_dt = parse_date_strict(start)
