@@ -14,6 +14,7 @@ __pycache__/
 .aidweather_cache/
 *.db
 *.sqlite
+.coverage
 
 # Dev & IDE folders/files
 .agents/
@@ -53,3 +54,7 @@ examples/
 
 # Results and Outputs from tests
 outputs/
+
+# Pre-release audit reports
+pre-release-report/
+
