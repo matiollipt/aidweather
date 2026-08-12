@@ -26,15 +26,30 @@
 5. Smoke test the built wheel in a clean environment:
 
    ```bash
-   python -m venv /tmp/aidweather-wheel-smoke
+   uv run python -m venv /tmp/aidweather-wheel-smoke
    /tmp/aidweather-wheel-smoke/bin/python -m pip install dist/*.whl
    /tmp/aidweather-wheel-smoke/bin/python -c "import aidweather; print(aidweather.__version__)"
    /tmp/aidweather-wheel-smoke/bin/aidweather --help
    /tmp/aidweather-wheel-smoke/bin/aidweather params list
    ```
 
-6. Review README beta status, NASA POWER attribution, and changelog notes.
-7. Confirm no generated artifacts (e.g. `outputs/`) are tracked or bundled — check
+6. All tests in a block:
+
+   ```bash
+   uv run --with-editable . --extra test pytest -q
+      uv run ruff check src/
+   uv run mypy src/aidweather
+   uv run python -m build
+   uv run python -m twine check dist/*
+   uv run python -m venv /tmp/aidweather-wheel-smoke
+      /tmp/aidweather-wheel-smoke/bin/python -m pip install dist/*.whl
+   /tmp/aidweather-wheel-smoke/bin/python -c "import aidweather; print(aidweather.__version__)"
+   /tmp/aidweather-wheel-smoke/bin/aidweather --help
+   /tmp/aidweather-wheel-smoke/bin/aidweather params list
+   ```
+
+7. Review README beta status, NASA POWER attribution, and changelog notes.
+8. Confirm no generated artifacts (e.g. `outputs/`) are tracked or bundled — check
    `git status` and inspect the sdist tarball contents.
 
 ## Phase 2 — TestPyPI dry run
@@ -42,13 +57,13 @@
 One-time setup, before the first ever TestPyPI publish: register a pending trusted
 publisher at https://test.pypi.org/manage/account/publishing/ with:
 
-| Field | Value |
-|---|---|
-| PyPI Project Name | `aidweather` |
-| Owner | `matiollipt` |
-| Repository name | `aidweather` |
-| Workflow name | `publish-testpypi.yml` |
-| Environment name | `testpypi` |
+| Field             | Value                  |
+| ----------------- | ---------------------- |
+| PyPI Project Name | `aidweather`           |
+| Owner             | `matiollipt`           |
+| Repository name   | `aidweather`           |
+| Workflow name     | `publish-testpypi.yml` |
+| Environment name  | `testpypi`             |
 
 Then, for every dry run:
 
@@ -71,13 +86,13 @@ Then, for every dry run:
 One-time setup, before the first ever PyPI publish: register a pending trusted publisher
 at https://pypi.org/manage/account/publishing/ with:
 
-| Field | Value |
-|---|---|
-| PyPI Project Name | `aidweather` |
-| Owner | `matiollipt` |
-| Repository name | `aidweather` |
-| Workflow name | `publish.yml` |
-| Environment name | `pypi` |
+| Field             | Value         |
+| ----------------- | ------------- |
+| PyPI Project Name | `aidweather`  |
+| Owner             | `matiollipt`  |
+| Repository name   | `aidweather`  |
+| Workflow name     | `publish.yml` |
+| Environment name  | `pypi`        |
 
 Then, for the actual release:
 
