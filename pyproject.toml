@@ -47,6 +47,10 @@ test = [
     "ruff>=0.2.0",
     "pandas-stubs",
 ]
+release = [
+    "build>=1.1.0",
+    "twine>=5.0.0",
+]
 
 [project.scripts]
 aidweather = "aidweather.cli:app"
@@ -59,7 +63,12 @@ Repository = "https://github.com/matiollipt/aidweather"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"aidweather.assets" = ["*.json", "*.mplstyle"]
+"aidweather.assets" = [
+    "*.json",
+    "*.mplstyle",
+    "skills/aidweather/*.md",
+    "skills/aidweather/references/*.md",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "examples/brazil"]

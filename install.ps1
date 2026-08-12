@@ -9,7 +9,10 @@
     Install globally in an isolated environment using uv tool.
 
 .PARAMETER Dev
-    Install developer tools (pytest, ruff, mypy, build).
+    Shortcut for -Extra test -Extra release (test tools + build/publish tools).
+
+.PARAMETER Extra
+    Install one or more pyproject.toml optional-dependency extras (e.g. "test").
 
 .PARAMETER NoVenv
     Skip virtual environment creation (use active/global Python).
@@ -23,22 +26,45 @@
 .PARAMETER Yes
     Skip confirmation prompts.
 
+.PARAMETER InstallSkill
+    Copy the bundled Claude Code skill to $HOME\.claude\skills\aidweather.
+
 .EXAMPLE
     .\install.ps1
 
 .EXAMPLE
     .\install.ps1 -Dev -Clean
+
+.EXAMPLE
+    .\install.ps1 -Extra test
+
+.EXAMPLE
+    .\install.ps1 -InstallSkill
 #>
 
 [CmdletBinding()]
 param (
     [switch]$UvTool,
     [switch]$Dev,
+    [string[]]$Extra = @(),
     [switch]$NoVenv,
     [string]$VenvPath = ".venv",
     [switch]$Clean,
-    [switch]$Yes
+    [switch]$Yes,
+    [switch]$InstallSkill
 )
+
+# Collect requested pyproject.toml extras (deduplicated)
+$ExtrasList = New-Object System.Collections.Generic.List[string]
+foreach ($e in $Extra) {
+    if (-not $ExtrasList.Contains($e)) { $ExtrasList.Add($e) }
+}
+if ($Dev) {
+    foreach ($e in @("test", "release")) {
+        if (-not $ExtrasList.Contains($e)) { $ExtrasList.Add($e) }
+    }
+}
+$PkgSpec = if ($ExtrasList.Count -gt 0) { ".[$($ExtrasList -join ',')]" } else { "." }
 
 $ErrorActionPreference = "Stop"
 
@@ -279,7 +305,7 @@ if ($UvTool) { $VenvLabel = "uv tool (isolated user environment)" }
 
 Info "Installing aidweather"
 Info "Environment: $VenvLabel"
-Info "Developer tools: $Dev"
+Info "Extras: $(if ($ExtrasList.Count -gt 0) { $ExtrasList -join ',' } else { 'none' })"
 
 if (-not $Yes) {
     # Check if host is interactive
@@ -294,53 +320,25 @@ if (-not $Yes) {
     }
 }
 
-# 7. Execute Installation
+# 7. Execute Installation (with requested extras, if any)
 if ($UvTool) {
     Info "Installing package with uv tool"
     if (uv tool list 2>$null | Select-String "aidweather") {
         Info "Existing uv tool install found; reinstalling"
-        uv tool install --reinstall .
+        uv tool install --reinstall $PkgSpec
     } else {
-        uv tool install .
+        uv tool install $PkgSpec
     }
 } else {
     Info "Installing package"
-    if ($Dev) {
-        Pip-Install @("-e", ".")
+    if ($Dev -or $ExtrasList.Count -gt 0) {
+        Pip-Install @("-e", $PkgSpec)
     } else {
-        Pip-Install @(".")
+        Pip-Install @($PkgSpec)
     }
 }
 
-# 8. Install developer dependencies if requested
-if ($Dev) {
-    $devDeps = @(
-        "pytest>=8.0.0",
-        "pytest-cov>=4.1.0",
-        "requests-mock>=1.11.0",
-        "ruff>=0.3.0",
-        "mypy>=1.9.0",
-        "build>=1.1.0",
-        "twine>=5.0.0"
-    )
-    if ($UvTool) {
-        Info "Installing developer tools into uv tool environment"
-        uv tool install `
-            --with "pytest>=8.0.0" `
-            --with "pytest-cov>=4.1.0" `
-            --with "requests-mock>=1.11.0" `
-            --with "ruff>=0.3.0" `
-            --with "mypy>=1.9.0" `
-            --with "build>=1.1.0" `
-            --with "twine>=5.0.0" `
-            --reinstall .
-    } else {
-        Info "Installing developer tools"
-        Pip-Install $devDeps
-    }
-}
-
-# 9. Smoke check
+# 8. Smoke check
 Info "Checking installation"
 if ($UvTool) {
     if (Get-Command aidweather -ErrorAction SilentlyContinue) {
@@ -357,6 +355,22 @@ if ($UvTool) {
     }
     if ($LASTEXITCODE -ne 0) {
         Die "Smoke test failed: Could not import aidweather."
+    }
+}
+
+# 9. Optional: install the bundled Claude Code skill
+if ($InstallSkill) {
+    $SkillSrc = Join-Path $RepoRoot "src/aidweather/assets/skills/aidweather"
+    if (Test-Path $SkillSrc) {
+        $SkillDest = Join-Path $HOME ".claude/skills/aidweather"
+        New-Item -ItemType Directory -Force -Path (Split-Path $SkillDest) | Out-Null
+        if (Test-Path $SkillDest) {
+            Remove-Item -Recurse -Force $SkillDest
+        }
+        Copy-Item -Recurse -Force $SkillSrc $SkillDest
+        Ok "Claude Code skill installed to $SkillDest"
+    } else {
+        Warn "Skill source not found at $SkillSrc; skipping -InstallSkill."
     }
 }
 

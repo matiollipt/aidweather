@@ -16,6 +16,20 @@
 4. **Python Bindings & Full CLI**: Dual interface offering an intuitive Python API for data science workflows and a full-featured Command Line Interface (CLI) for quick command-line extractions.
 5. **Smart Error Catching & Logging**: Comprehensive activity logging and intelligent error handling, providing clear insights into query execution and data processing.
 
+**Quick install (Unix / macOS):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash
+```
+
+**Quick install (Windows PowerShell):**
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/matiollipt/aidweather/main/install.ps1))) -Yes
+```
+
+See [Installation](#installation) below for `uv tool install`, virtual-env, and optional-extras options.
+
 > [!WARNING]
 > **Beta Status:** `aidweather` is in active beta. Public API methods and CLI options are stable, but additions may occur prior to 1.0. Feedback and [issue reports](https://github.com/matiollipt/aidweather/issues) are welcome.
 
@@ -72,6 +86,69 @@ uv tool install git+https://github.com/matiollipt/aidweather.git
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/matiollipt/aidweather/main/install.ps1))) -Yes
 ```
+
+### Optional Extras
+
+`pyproject.toml` defines two [optional-dependency](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#extras)
+groups: `test` (pytest, ruff, mypy, and related type-checking/test tooling) and `release`
+(`build`, `twine`, for cutting a release per `docs/release_checklist.md`).
+
+**With `uv tool install`** — append the extra(s) to the package spec, in brackets, before the `@`:
+
+```bash
+# Single extra
+uv tool install "aidweather[test] @ git+https://github.com/matiollipt/aidweather.git"
+
+# Multiple extras
+uv tool install "aidweather[test,release] @ git+https://github.com/matiollipt/aidweather.git"
+```
+
+**With the install scripts** — pass `--extra NAME` (repeatable) on Unix/macOS or `-Extra NAME`
+on Windows; `--dev`/`-Dev` is a shortcut for both `test` and `release`:
+
+```bash
+# Unix / macOS
+./install.sh --extra test              # test tooling only
+./install.sh --dev                     # test + release (equivalent to --extra test --extra release)
+curl -fsSL .../install.sh | bash -s -- --dev -y
+```
+
+```powershell
+# Windows (PowerShell)
+.\install.ps1 -Extra test
+.\install.ps1 -Dev
+```
+
+**From a local clone**, the same extras syntax works directly with `pip`/`uv pip`:
+
+```bash
+pip install -e ".[test]"
+uv pip install -e ".[test,release]"
+```
+
+---
+
+## Claude Code Skill
+
+`aidweather` ships a [Claude Code](https://claude.com/claude-code) skill (bundled as package
+data at `src/aidweather/assets/skills/aidweather/`) that teaches an agent how to bootstrap the
+CLI, translate messy coordinate/date requests into `aidweather` calls, and read back JSON
+output. Install it into `~/.claude/skills/aidweather` alongside the package:
+
+```bash
+./install.sh --install-skill
+# or, on an existing install, just re-run with the flag added:
+./install.sh --install-skill -y
+```
+
+```powershell
+.\install.ps1 -InstallSkill
+```
+
+If you only want the skill (no package install), download the two files directly:
+[`SKILL.md`](src/aidweather/assets/skills/aidweather/SKILL.md) and
+[`references/request-patterns.md`](src/aidweather/assets/skills/aidweather/references/request-patterns.md),
+and place them under `~/.claude/skills/aidweather/`.
 
 ---
 

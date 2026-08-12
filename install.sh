@@ -3,7 +3,7 @@
 #  aidweather Installer
 #
 #  Usage:
-#    ./install.sh [--dev] [--no-venv] [--venv-path DIR] [--clean] [-y]
+#    ./install.sh [--dev] [--extra NAME] [--no-venv] [--venv-path DIR] [--clean] [-y]
 #
 #  Remote one-liner:
 #    curl -fsSL https://raw.githubusercontent.com/matiollipt/aidweather/main/install.sh | bash
@@ -23,6 +23,17 @@ VENV_PATH=".venv"
 CLEAN_VENV=false
 AUTO_YES=false
 USE_UV_TOOL=false
+INSTALL_SKILL=false
+EXTRAS=""
+
+# Add a pyproject.toml [project.optional-dependencies] group to $EXTRAS
+# (comma-separated, de-duplicated).
+add_extra() {
+    case ",$EXTRAS," in
+        *",$1,"*) ;;
+        *) EXTRAS="${EXTRAS:+$EXTRAS,}$1" ;;
+    esac
+}
 
 # Help
 show_help() {
@@ -31,16 +42,20 @@ show_help() {
     printf '  ./install.sh [options]\n\n'
     printf 'Options:\n'
     printf '  %-24s %s\n' "--uv-tool"       "Install globally in isolated env using uv tool"
-    printf '  %-24s %s\n' "--dev"           "Install developer tools (pytest, ruff, mypy, build)"
+    printf '  %-24s %s\n' "--dev"           "Shortcut for --extra test --extra release"
+    printf '  %-24s %s\n' "--extra NAME"    "Install a pyproject.toml extra (repeatable, e.g. 'test')"
     printf '  %-24s %s\n' "--no-venv"       "Skip venv creation (use active/global Python)"
     printf '  %-24s %s\n' "--venv-path DIR" "Custom venv path (default: .venv)"
     printf '  %-24s %s\n' "--clean"         "Wipe and recreate venv before installing"
+    printf '  %-24s %s\n' "--install-skill" "Copy the bundled Claude Code skill to ~/.claude/skills/aidweather"
     printf '  %-24s %s\n' "-y, --yes"       "Skip confirmation prompts"
     printf '  %-24s %s\n' "-h, --help"      "Show this help and exit"
     printf '\nExamples:\n'
     printf '  ./install.sh                         # Default install in .venv\n'
     printf '  ./install.sh --uv-tool               # Install globally via uv tool\n'
-    printf '  ./install.sh --dev --clean           # Fresh install with dev tools\n'
+    printf '  ./install.sh --extra test            # Install with pytest/ruff/mypy only\n'
+    printf '  ./install.sh --dev --clean           # Fresh install with test + release extras\n'
+    printf '  ./install.sh --install-skill         # Also install the Claude Code skill\n'
     printf '  curl -fsSL .../install.sh | bash -s -- --dev -y\n\n'
     exit 0
 }
@@ -48,16 +63,29 @@ show_help() {
 # Argument parsing
 while [ $# -gt 0 ]; do
     case "$1" in
-        --uv-tool)      USE_UV_TOOL=true; shift ;;
-        --dev|-d)       DEV_MODE=true;  shift ;;
-        --no-venv)      USE_VENV=false; shift ;;
-        --venv-path)    VENV_PATH="$2"; shift 2 ;;
-        --clean)        CLEAN_VENV=true; shift ;;
-        -y|--yes)       AUTO_YES=true;  shift ;;
-        -h|--help)      show_help ;;
+        --uv-tool)       USE_UV_TOOL=true; shift ;;
+        --dev|-d)        DEV_MODE=true;  shift ;;
+        --extra)         add_extra "$2"; shift 2 ;;
+        --no-venv)       USE_VENV=false; shift ;;
+        --venv-path)     VENV_PATH="$2"; shift 2 ;;
+        --clean)         CLEAN_VENV=true; shift ;;
+        --install-skill) INSTALL_SKILL=true; shift ;;
+        -y|--yes)        AUTO_YES=true;  shift ;;
+        -h|--help)       show_help ;;
         *) die "Unknown option: $1  (run with --help for usage)" ;;
     esac
 done
+
+if [ "$DEV_MODE" = true ]; then
+    add_extra test
+    add_extra release
+fi
+
+if [ -n "$EXTRAS" ]; then
+    PKG_SPEC=".[$EXTRAS]"
+else
+    PKG_SPEC="."
+fi
 
 # Detect context (clone vs in-repo)
 if [ -f "pyproject.toml" ] && [ -d "src/aidweather" ]; then
@@ -179,7 +207,7 @@ if [ "$USE_UV_TOOL" = true ]; then
 fi
 info "Installing aidweather"
 info "Environment: $venv_label"
-info "Developer tools: $DEV_MODE"
+info "Extras: ${EXTRAS:-none}"
 
 if [ "$AUTO_YES" = false ]; then
     if [ -t 0 ] || [ -c /dev/tty ]; then
@@ -197,47 +225,21 @@ if [ "$AUTO_YES" = false ]; then
     fi
 fi
 
-# Install core package
+# Install core package (with requested extras, if any)
 if [ "$USE_UV_TOOL" = true ]; then
     info "Installing package with uv tool"
     if uv tool list 2>/dev/null | grep -q "aidweather"; then
         info "Existing uv tool install found; reinstalling"
-        uv tool install --reinstall .
+        uv tool install --reinstall "$PKG_SPEC"
     else
-        uv tool install .
+        uv tool install "$PKG_SPEC"
     fi
 else
     info "Installing package"
-    if [ "$DEV_MODE" = true ]; then
-        pip_install -e .
+    if [ "$DEV_MODE" = true ] || [ -n "$EXTRAS" ]; then
+        pip_install -e "$PKG_SPEC"
     else
-        pip_install .
-    fi
-fi
-
-# Developer tools
-if [ "$DEV_MODE" = true ]; then
-    if [ "$USE_UV_TOOL" = true ]; then
-        info "Installing developer tools into uv tool environment"
-        uv tool install \
-            --with "pytest>=8.0.0" \
-            --with "pytest-cov>=4.1.0" \
-            --with "requests-mock>=1.11.0" \
-            --with "ruff>=0.3.0" \
-            --with "mypy>=1.9.0" \
-            --with "build>=1.1.0" \
-            --with "twine>=5.0.0" \
-            --reinstall .
-    else
-        info "Installing developer tools"
-        pip_install \
-            "pytest>=8.0.0" \
-            "pytest-cov>=4.1.0" \
-            "requests-mock>=1.11.0" \
-            "ruff>=0.3.0" \
-            "mypy>=1.9.0" \
-            "build>=1.1.0" \
-            "twine>=5.0.0"
+        pip_install "$PKG_SPEC"
     fi
 fi
 
@@ -267,6 +269,20 @@ except ImportError:
     sys.exit(1)
 
 PYEOF
+fi
+
+# Optional: install the bundled Claude Code skill
+if [ "$INSTALL_SKILL" = true ]; then
+    SKILL_SRC="$REPO_ROOT/src/aidweather/assets/skills/aidweather"
+    if [ -d "$SKILL_SRC" ]; then
+        SKILL_DEST="$HOME/.claude/skills/aidweather"
+        mkdir -p "$HOME/.claude/skills"
+        rm -rf "$SKILL_DEST"
+        cp -R "$SKILL_SRC" "$SKILL_DEST"
+        ok "Claude Code skill installed to $SKILL_DEST"
+    else
+        warn "Skill source not found at $SKILL_SRC; skipping --install-skill."
+    fi
 fi
 
 # Done
