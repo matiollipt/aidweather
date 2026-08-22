@@ -19,8 +19,8 @@
 4. Build and validate distributions:
 
    ```bash
-   python -m build
-   python -m twine check dist/*
+   uv run python -m build
+   uv run python -m twine check dist/*
    ```
 
 5. Smoke test the built wheel in a clean environment:
